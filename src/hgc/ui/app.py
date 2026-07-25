@@ -104,22 +104,32 @@ if page == "Find sites":
             col_s, col_e = st.columns(2)
             start = col_s.date_input("From", date.today() - timedelta(days=365 * 6))
             end = col_e.date_input("To", date.today())
+
+        # Limit controls on both catalog and chemistry sources.
+        col_nl, col_lim = st.columns([1, 3])
+        no_limit = col_nl.checkbox("No limit", help="Return every matching site (can be a lot)")
+        limit = col_lim.number_input("Max sites", 10, 5000, 200, step=10, disabled=no_limit)
+
+        if source == "wqp":
             st.caption(
-                "Live USGS Samples query. A bounding box returns in seconds; a whole state can "
-                "take a minute or more. Results carry coordinates, so they appear on the map."
+                "Live USGS Samples query. To load faster, narrow the date range or use a bounding "
+                "box; a whole state over many years can take a minute or more. 'Max sites' caps the "
+                "list returned, but the query still scans the whole area. Results carry coordinates."
             )
-        else:  # nwis / site catalog
-            no_limit = st.checkbox("No limit", help="Return every matching site (can be a lot)")
-            limit = st.number_input("Max sites", 10, 5000, 200, step=10, disabled=no_limit)
+        else:
+            st.caption(
+                "The site catalogue lists every monitoring location in the area. 'Max sites' is "
+                "applied at the source, so a smaller number loads faster."
+            )
 
     if st.button("Search", type="primary"):
         client = get_client()
+        capped = None if no_limit else int(limit)
         try:
             with st.spinner("Searching..."):
                 if source == "nwis":
                     found = client.search_sites(
-                        state=state or None, bbox=bbox or None,
-                        limit=None if no_limit else int(limit),
+                        state=state or None, bbox=bbox or None, limit=capped,
                     )
                 elif source == "synthetic":
                     found = client.ready_sites(source="synthetic")
@@ -127,6 +137,7 @@ if page == "Find sites":
                     found = client.ready_sites(
                         source="wqp", provider=provider,
                         state=state or None, bbox=bbox or None, start=start, end=end,
+                        limit=capped,
                     )
         except ApiError as exc:
             show_error(exc)
