@@ -1,0 +1,58 @@
+name: hydrogeochem
+
+x-app: &app
+  build: .
+  environment:
+    HGC_ENV: local
+    HGC_LOG_FORMAT: console
+    HGC_DATABASE_URL: postgresql+psycopg://hgc:hgc@postgres:5432/hgc
+    HGC_REDIS_URL: redis://redis:6379/0
+    HGC_PHREEQC_DATABASE_DIR: /opt/phreeqc/database
+  depends_on:
+    postgres: {condition: service_healthy}
+    redis: {condition: service_started}
+
+services:
+  api:
+    <<: *app
+    command: uvicorn hgc.api.main:app --host 0.0.0.0 --port 8000 --reload
+    ports: ["8000:8000"]
+    volumes: ["./src:/app/src:ro"]
+
+  worker:
+    <<: *app
+    # Concurrency matches CPU: PHREEQC saturates a core, and oversubscription turns
+    # a 200 ms speciation into a timeout.
+    command: celery -A hgc.worker.celery_app.celery_app worker -Q runs,batches -c 2 --loglevel=info
+    deploy:
+      resources:
+        limits: {cpus: "2", memory: 2G}
+
+  ui:
+    <<: *app
+    command: streamlit run src/hgc/ui/app.py --server.port=8501 --server.address=0.0.0.0
+    environment:
+      HGC_API_URL: http://api:8000
+    ports: ["8501:8501"]
+    depends_on: [api]
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: hgc
+      POSTGRES_PASSWORD: hgc
+      POSTGRES_DB: hgc
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hgc"]
+      interval: 5s
+      retries: 10
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    ports: ["5432:5432"]
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save "" --appendonly no
+    ports: ["6379:6379"]
+
+volumes:
+  pgdata:

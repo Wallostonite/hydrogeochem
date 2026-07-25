@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "API (uvicorn, reload)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["hgc.api.main:app", "--reload", "--port", "8000"],
+      "env": { "HGC_ENV": "test", "PYTHONPATH": "${workspaceFolder}/src" },
+      "justMyCode": false
+    },
+    {
+      "name": "Streamlit UI",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "streamlit",
+      "args": ["run", "src/hgc/ui/app.py"],
+      "env": { "PYTHONPATH": "${workspaceFolder}/src", "HGC_API_URL": "http://localhost:8000" },
+      "justMyCode": false
+    },
+    {
+      "name": "Smoke test (real PHREEQC run)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/ops/smoke_test.py",
+      "env": { "HGC_ENV": "test", "PYTHONPATH": "${workspaceFolder}/src" },
+      "justMyCode": false
+    },
+    {
+      "name": "Pytest (current file)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["${file}", "-v"],
+      "env": { "HGC_ENV": "test", "PYTHONPATH": "${workspaceFolder}/src" },
+      "justMyCode": false
+    }
+  ]
+}

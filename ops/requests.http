@@ -1,0 +1,68 @@
+### VS Code REST Client scratchpad. Install 'humao.rest-client', then click "Send Request".
+@host = http://localhost:8000
+
+### Liveness
+GET {{host}}/healthz
+
+### Readiness — 503 until the PHREEQC databases are installed
+GET {{host}}/readyz
+
+### What the API can do: databases, phases, the parameter registry
+GET {{host}}/v1/catalog
+
+### Site search (hits the live USGS service)
+GET {{host}}/v1/sites?state=CO&limit=5
+
+### Analyses at one site, with the representative sample and a readiness verdict
+GET {{host}}/v1/sites/USGS-06730200/samples?start=2022-01-01&end=2024-12-31&aggregate=median
+
+### Render the PHREEQC input without running it — check the units before you trust the answer
+POST {{host}}/v1/runs/preview
+Content-Type: application/json
+
+{
+  "sample": {
+    "site_id": "USGS-06730200",
+    "measurements": [
+      {"key": "ph", "value": 7.4, "unit": "std units"},
+      {"key": "ca", "value": 88, "unit": "mg/l"},
+      {"key": "mg", "value": 24, "unit": "mg/l"},
+      {"key": "so4", "value": 64, "unit": "mg/l"},
+      {"key": "alk_caco3", "value": 250, "unit": "mg/l"},
+      {"key": "fe", "value": 45, "unit": "ug/l"}
+    ]
+  },
+  "spec": {"database": "phreeqc.dat", "saturation_phases": ["Calcite", "Dolomite", "Gypsum"]}
+}
+
+### Run it
+POST {{host}}/v1/runs
+Content-Type: application/json
+
+{
+  "sample": {
+    "site_id": "USGS-06730200",
+    "measurements": [
+      {"key": "ph", "value": 7.4, "unit": "std units"},
+      {"key": "ca", "value": 88, "unit": "mg/l"},
+      {"key": "alk_caco3", "value": 250, "unit": "mg/l"}
+    ]
+  },
+  "spec": {"database": "phreeqc.dat"}
+}
+
+### Rejected: file access is not permitted, even for authenticated experts
+POST {{host}}/v1/runs
+Content-Type: application/json
+
+{"raw_input": "DUMP\n    -file /tmp/leak.txt\nEND\n", "spec": {"database": "phreeqc.dat"}}
+
+### Expert input that is allowed
+POST {{host}}/v1/runs
+Content-Type: application/json
+
+{"raw_input": "SOLUTION 1\n    units mg/l\n    pH 7.2\n    Ca 88\n    Alkalinity 210 as HCO3\nEND\n",
+ "spec": {"database": "phreeqc.dat"}}
+
+### Metrics
+GET {{host}}/metrics

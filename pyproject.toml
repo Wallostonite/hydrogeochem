@@ -1,0 +1,52 @@
+[project]
+name = "hydrogeochem"
+version = "1.0.0"
+description = "USGS water-quality retrieval and PHREEQC geochemical modelling as a service"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "pydantic>=2.8",
+  "pydantic-settings>=2.4",
+  "httpx>=0.27",
+  "tenacity>=9.0",
+  "sqlalchemy>=2.0",
+  "psycopg[binary]>=3.2",
+  "alembic>=1.13",
+  "redis>=5.0",
+  "celery>=5.4",
+  "pandas>=2.2",
+  "phreeqpy>=0.6",
+  "prometheus-client>=0.20",
+  "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+ui = ["streamlit>=1.38", "plotly>=5.23", "pydeck>=0.9", "requests>=2.32"]
+dev = ["pytest>=8", "pytest-cov", "respx>=0.21", "ruff>=0.6", "mypy>=1.11", "types-requests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hgc"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = []
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q --strict-markers"
+markers = ["phreeqc: requires a working IPhreeqc installation"]

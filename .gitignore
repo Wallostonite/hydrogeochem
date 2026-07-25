@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets and local configuration (NEVER commit .env — it holds the Supabase password)
+.env
+.streamlit/secrets.toml
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+
+# Note: ops/phreeqc-databases/*.dat ARE committed on purpose — the Dockerfile copies them
+# into the API image at build time. Run `make databases` if they are ever missing.

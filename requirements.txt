@@ -1,0 +1,8 @@
+# Dependencies for deploying the Streamlit UI on Streamlit Community Cloud.
+# The UI is a pure HTTP client of the API, so it needs only these light packages
+# (not the full app in pyproject.toml). Point it at your API with the HGC_API_URL secret.
+streamlit>=1.38
+pandas>=2.2
+plotly>=5.23
+pydeck>=0.9
+requests>=2.32
