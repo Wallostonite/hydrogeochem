@@ -60,6 +60,9 @@ class ReadySite(BaseModel):
 
     site_id: str
     name: str
+    site_type: str | None = Field(
+        default=None, description="e.g. Stream (surface water), Well (groundwater), Lake, Spring"
+    )
     latitude: float | None = None
     longitude: float | None = None
     source: str = "wqp"

@@ -208,6 +208,8 @@ class UsgsClient:
                     entry = sites.setdefault(loc["site_id"], {**loc, "keys": []})
                     if k not in entry["keys"]:
                         entry["keys"].append(k)
+                    if not entry.get("type") and loc.get("type"):
+                        entry["type"] = loc["type"]
             cached = list(sites.values())
             self._cache.set(key, cached, self._cfg.ttl_sites_s)
 
@@ -215,6 +217,7 @@ class UsgsClient:
             ReadySite(
                 site_id=r["site_id"],
                 name=r["name"] or r["site_id"],
+                site_type=r.get("type") or None,
                 latitude=r.get("lat"),
                 longitude=r.get("lon"),
                 source="usgs",
@@ -273,6 +276,7 @@ class UsgsClient:
                 {
                     "site_id": site_id,
                     "name": (row.get("Location_Name") or "").strip(),
+                    "type": (row.get("Location_Type") or "").strip(),
                     "lat": _float(
                         row.get("Location_LatitudeStandardized") or row.get("Location_Latitude")
                     ),
