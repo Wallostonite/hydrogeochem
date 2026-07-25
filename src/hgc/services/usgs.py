@@ -63,6 +63,7 @@ class WaterDataSource(Protocol):
 class HttpConfig:
     ogc_base: str      # WDFN OGC API, e.g. https://api.waterdata.usgs.gov/ogcapi/v0
     samples_base: str  # USGS Samples Data API, e.g. https://api.waterdata.usgs.gov/samples-data
+    api_key: str = ""  # api.data.gov key; without it these APIs rate-limit by IP
     timeout_s: float = 30.0
     max_retries: int = 3
     user_agent: str = "hydrogeochem/1.0"
@@ -76,9 +77,12 @@ class UsgsClient:
     def __init__(self, config: HttpConfig, cache: Cache, client: httpx.AsyncClient | None = None):
         self._cfg = config
         self._cache = cache
+        headers = {"User-Agent": config.user_agent, "Accept-Encoding": "gzip"}
+        if config.api_key:
+            headers["X-Api-Key"] = config.api_key  # api.data.gov key for higher rate limits
         self._client = client or httpx.AsyncClient(
             timeout=httpx.Timeout(config.timeout_s, connect=5.0),
-            headers={"User-Agent": config.user_agent, "Accept-Encoding": "gzip"},
+            headers=headers,
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
             follow_redirects=True,
         )
@@ -226,7 +230,7 @@ class UsgsClient:
         return ready
 
     async def _add_observation_counts(
-        self, sites: list[ReadySite], concurrency: int = 15, cap: int = 150
+        self, sites: list[ReadySite], concurrency: int = 4, cap: int = 60
     ) -> None:
         """Fill in each site's total-measurement count (bounded, concurrent, cached)."""
         semaphore = asyncio.Semaphore(concurrency)

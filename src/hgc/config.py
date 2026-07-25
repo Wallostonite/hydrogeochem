@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     # These replace the retired NWISWeb/WaterServices site service and the Water Quality Portal.
     wdfn_ogc_base_url: str = "https://api.waterdata.usgs.gov/ogcapi/v0"
     samples_base_url: str = "https://api.waterdata.usgs.gov/samples-data"
+    # The USGS Water Data APIs run behind api.data.gov, which rate-limits by IP without a key.
+    # Register a free key at https://api.data.gov/signup and set HGC_USGS_API_KEY for high limits.
+    usgs_api_key: str = ""
     http_timeout_s: float = 30.0
     http_max_retries: int = 3
     http_user_agent: str = "hydrogeochem/1.0 (+https://example.org/hydrogeochem)"

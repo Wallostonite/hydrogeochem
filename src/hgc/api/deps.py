@@ -50,6 +50,7 @@ def build_container(settings: Settings | None = None, queue=None) -> Container:
         HttpConfig(
             ogc_base=settings.wdfn_ogc_base_url,
             samples_base=settings.samples_base_url,
+            api_key=settings.usgs_api_key,
             timeout_s=settings.http_timeout_s,
             max_retries=settings.http_max_retries,
             user_agent=settings.http_user_agent,

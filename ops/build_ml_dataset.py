@@ -83,7 +83,7 @@ def _new_client(settings):
 
     return UsgsClient(
         HttpConfig(ogc_base=settings.wdfn_ogc_base_url, samples_base=settings.samples_base_url,
-                   timeout_s=120.0, user_agent=settings.http_user_agent),
+                   api_key=settings.usgs_api_key, timeout_s=120.0, user_agent=settings.http_user_agent),
         cache=build_cache(None),
     )
 
