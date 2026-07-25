@@ -142,8 +142,11 @@ class UsgsClient:
         key = cache_key("sites", params)
         cached = self._cache.get(key)
         if cached is not None:
-            rows = [SiteSummary(**row) for row in cached]
-            return rows[:limit] if limit else rows  # limit == 0 means no cap
+            # Slice the raw rows before rebuilding models: a cached statewide search can hold
+            # tens of thousands of sites, and building all of them just to keep `limit` is the
+            # bulk of a cache-hit's latency.
+            rows = cached[:limit] if limit else cached  # limit == 0 means no cap
+            return [SiteSummary(**row) for row in rows]
 
         text = await self._get_text(f"{self._cfg.nwis_base}/site/", params)
         sites = _parse_rdb_sites(text)

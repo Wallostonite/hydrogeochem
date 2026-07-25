@@ -60,6 +60,11 @@ class RedisCache:
 
         self._client = redis.Redis.from_url(url, socket_timeout=1.0, socket_connect_timeout=1.0)
 
+    def ping(self) -> None:
+        """Force a real connection. redis-py connects lazily, so construction alone never
+        proves the server is reachable; build_cache calls this to decide on a fallback."""
+        self._client.ping()
+
     def get(self, key: str) -> Any | None:
         try:
             raw = self._client.get(key)
@@ -79,7 +84,11 @@ def build_cache(redis_url: str | None) -> Cache:
     if not redis_url:
         return InMemoryCache()
     try:
-        return RedisCache(redis_url)
+        cache = RedisCache(redis_url)
+        cache.ping()  # verify the server is actually reachable, not just the URL parseable
+        return cache
     except Exception as exc:  # noqa: BLE001
+        # No Redis (e.g. a single-container deploy)? Fall back to an in-process cache rather
+        # than a Redis that silently fails every op, which is effectively no caching at all.
         log.warning("redis_unavailable_using_memory_cache", extra={"error": str(exc)})
         return InMemoryCache()
