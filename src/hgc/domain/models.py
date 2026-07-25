@@ -65,6 +65,9 @@ class ReadySite(BaseModel):
     source: str = "wqp"
     analytes: list[str] = Field(default_factory=list)
     missing: list[str] = Field(default_factory=list)
+    observations: int | None = Field(
+        default=None, description="Total measurements at the site across its whole record"
+    )
 
 
 class WaterSample(BaseModel):

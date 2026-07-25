@@ -221,7 +221,38 @@ class UsgsClient:
             if len(set(r["keys"])) >= threshold
         ]
         ready.sort(key=lambda s: (-len(s.analytes), s.site_id))
-        return ready[:limit] if limit else ready
+        ready = ready[:limit] if limit else ready
+        await self._add_observation_counts(ready)
+        return ready
+
+    async def _add_observation_counts(
+        self, sites: list[ReadySite], concurrency: int = 15, cap: int = 150
+    ) -> None:
+        """Fill in each site's total-measurement count (bounded, concurrent, cached)."""
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def _one(site: ReadySite) -> None:
+            async with semaphore:
+                site.observations = await self._observation_count(site.site_id)
+
+        await asyncio.gather(*[_one(s) for s in sites[:cap]])
+
+    async def _observation_count(self, site_id: str) -> int:
+        """Total measurements at a site across its whole record (Samples summary endpoint)."""
+        key = cache_key("obs", {"site": site_id})
+        cached = self._cache.get(key)
+        if cached is not None:
+            return cached
+        text = await self._get_text(
+            f"{self._cfg.samples_base}/summary/{site_id}", {"mimeType": "text/csv"}, timeout=30.0
+        )
+        total = sum(
+            int(row["resultCount"])
+            for row in _iter_csv(text)
+            if (row.get("resultCount") or "").strip().isdigit()
+        )
+        self._cache.set(key, total, self._cfg.ttl_sites_s)
+        return total
 
     async def _locations_for_key(self, base: dict[str, Any], key: str) -> list[dict[str, Any]]:
         """Sites (from the Samples locations endpoint) that report the analyte ``key``."""
