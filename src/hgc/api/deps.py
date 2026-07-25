@@ -48,8 +48,8 @@ def build_container(settings: Settings | None = None, queue=None) -> Container:
 
     usgs = UsgsClient(
         HttpConfig(
-            nwis_base=settings.nwis_base_url,
-            wqp_base=settings.wqp_base_url,
+            ogc_base=settings.wdfn_ogc_base_url,
+            samples_base=settings.samples_base_url,
             timeout_s=settings.http_timeout_s,
             max_retries=settings.http_max_retries,
             user_agent=settings.http_user_agent,

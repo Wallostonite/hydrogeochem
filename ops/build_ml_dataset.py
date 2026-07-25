@@ -82,8 +82,8 @@ def _new_client(settings):
     from hgc.services.usgs import HttpConfig, UsgsClient
 
     return UsgsClient(
-        HttpConfig(nwis_base=settings.nwis_base_url, wqp_base=settings.wqp_base_url,
-                   timeout_s=90.0, user_agent=settings.http_user_agent),
+        HttpConfig(ogc_base=settings.wdfn_ogc_base_url, samples_base=settings.samples_base_url,
+                   timeout_s=120.0, user_agent=settings.http_user_agent),
         cache=build_cache(None),
     )
 

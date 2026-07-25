@@ -217,18 +217,19 @@ Named error, actionable message, no stack trace.
 Still in `ops/requests.http`:
 
 ```
-GET localhost:8000/v1/sites?state=CO&limit=5
-GET localhost:8000/v1/sites/ready?source=wqp&bbox=-105.3,39.9,-105.1,40.1&start=2015-01-01
-GET localhost:8000/v1/sites/21COL001_WQX-5605/samples?start=2015-01-01&end=2024-12-31
+GET localhost:8000/v1/sites?bbox=-105.3,39.9,-105.1,40.1&limit=5
+GET localhost:8000/v1/sites/ready?source=wqp&bbox=-105.5,39.5,-104.5,40.5&start=2020-01-01
+GET localhost:8000/v1/sites/USGS-09071750/samples?start=2015-01-01&end=2022-12-31
 ```
 
-The first hits the USGS site service (locations only). The second finds sites that actually
-have the required chemistry. The third pulls one such site's analyses from the Water Quality
-Portal. All are live and occasionally slow; the client retries with backoff and caches for
-six hours, so a repeat returns instantly.
+The first hits the WDFN OGC monitoring-locations API (site catalogue). The second finds sites
+that actually carry the required chemistry via the USGS Samples API. The third pulls one such
+site's analyses. All are live and occasionally slow; the client retries with backoff and caches
+for six hours, so a repeat returns instantly.
 
-> **Do not use a `USGS-…` id here.** As of 2024 USGS discrete data has left the WQP, so those
-> return empty. Use a `…_WQX-…` id from `/v1/sites/ready` (or `ops/find_ready_sites.py`).
+> **USGS sites carry data again.** The app now reads USGS discrete chemistry from the Samples
+> API, so `USGS-…` ids return real, coordinate-tagged analyses. (The old Water Quality Portal
+> path, and its `…_WQX-…` state ids, has been retired from this app.)
 
 Look at `readiness` in the samples response, the analyte count, the charge-balance
 percentage, and any parameters missing for speciation. That's the honesty check running
@@ -327,15 +328,14 @@ pip install streamlit plotly pandas
 Press **F5** → **Streamlit UI**, with the API still running in your other terminal. It opens
 at <http://localhost:8501>.
 
-Try **Find sites**, pick the *Data source* **Has chemistry, WQP, all providers**, and search a
-Colorado bounding box. Click a result row to grab a `…_WQX-…` id, then **Model a sample** with
-that id over a **ten-year** window (WQP sampling is sparse, so widen the range). You should see
-the analysis count, the charge-balance metric, a warning if anything needed is missing, and a
+Try **Find sites**, pick the *Data source* **Has chemistry (USGS Samples)**, and search a
+Colorado bounding box. Click a result row to grab a `USGS-…` id, then **Model a sample** with
+that id over a **ten-year** window (discrete sampling is sparse, so widen the range). You should
+see the analysis count, the charge-balance metric, a warning if anything needed is missing, and a
 saturation-index chart. Expand **PHREEQC input used**, the UI shows the exact input, because a
 result you can't inspect is a result you can't put in a report.
 
-`21COL001_WQX-5605` (Clear Creek at Youngfield St.) is a reliable one to start with. A `USGS-…`
-id will return "No usable analyses", that data has left the WQP (see the note at the top).
+`USGS-09071750` (Colorado River above Glenwood Springs) is a reliable one to start with.
 
 ---
 

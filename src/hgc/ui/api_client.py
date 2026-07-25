@@ -25,7 +25,7 @@ class ApiError(RuntimeError):
 class ApiClient:
     base_url: str = os.getenv("HGC_API_URL", "http://localhost:8000")
     api_key: str | None = os.getenv("HGC_API_KEY")
-    timeout: float = 60.0
+    timeout: float = 120.0  # live USGS Samples queries and multi-model dataset builds can run long
 
     def _headers(self) -> dict[str, str]:
         headers = {"Accept": "application/json"}

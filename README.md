@@ -30,14 +30,14 @@ trends over time, more parameters, and machine-learning surrogates that make an 
 available even where sampling is thin. The aim is to move from a specialist geochemistry tool
 toward something the whole water community can use.
 
-> **Where the data comes from (read this first).** As of 2024, USGS discrete water-quality
-> data has largely **left the Water Quality Portal (WQP)**, so a `USGS-…` site typically
-> returns no analyses. The chemistry that is still retrievable comes from **state and other
-> providers** (STORET/WQX), whose site identifiers look like `21COL001_WQX-5605`. Use the
-> **finder** ([`ops/find_ready_sites.py`](ops/find_ready_sites.py)) or the UI's *Data source*
-> selector to discover sites that actually carry the required analytes. USGS's own discrete
-> data now lives in the newer [Water Data / Samples API](https://api.waterdata.usgs.gov/),
-> which the `dataretrieval` Python package wraps, a natural next adapter for this app.
+> **Where the data comes from.** The app is built on USGS **Water Data for the Nation (WDFN)**:
+> the [OGC monitoring-locations API](https://api.waterdata.usgs.gov/ogcapi/v0/) for site search
+> and the [Samples Data API](https://api.waterdata.usgs.gov/samples-data/) for discrete water
+> chemistry. These replace the retired NWISWeb/WaterServices site service and the Water Quality
+> Portal (whose USGS discrete data moved to the Samples API in 2024). A `USGS-…` site now returns
+> real chemistry again, with coordinates. Use the **finder**
+> ([`ops/find_ready_sites.py`](ops/find_ready_sites.py)) or the UI's *Data source* selector to
+> discover sites that carry the required analytes.
 
 ---
 
@@ -84,7 +84,7 @@ rather than failing every request with a stack trace.
 Streamlit UI ──┐
 Notebooks ─────┼──> FastAPI ──> PHREEQC process pool ──> IPhreeqc + pinned .dat files
 QGIS / curl ───┘        │  └──> Redis ──> Celery workers (batches, long runs)
-                        └────> Postgres (runs, samples)  ·  USGS NWIS + Water Quality Portal
+                        └────> Postgres (runs, samples)  ·  USGS Water Data for the Nation (OGC + Samples APIs)
 ```
 
 Four deployables, one image. The UI is a pure HTTP client of the API, so what a scientist
@@ -105,8 +105,8 @@ sees on screen is exactly what a script gets back.
 
 | Method | Path | Notes |
 |---|---|---|
-| `GET` | `/v1/sites` | Search the NWIS site catalogue by `state`, `bbox`, or `site_ids` (`limit=0` = no cap) |
-| `GET` | `/v1/sites/ready` | Sites that carry the required analytes. `source=wqp` (optional `provider`) or `source=synthetic` |
+| `GET` | `/v1/sites` | Search the WDFN site catalogue (OGC monitoring-locations) by `state`, `bbox`, or `site_ids` (`limit=0` = no cap) |
+| `GET` | `/v1/sites/ready` | Sites that carry the required analytes (USGS Samples API). `source=wqp` or `source=synthetic` |
 | `GET` | `/v1/sites/{id}/samples` | Normalised analyses + the representative sample + readiness |
 | `GET` | `/v1/sites/{id}/dataset` | Flat ML dataset: inputs joined with outputs, one row per `bucket` (event/month/quarter/year/window) |
 | `POST` | `/v1/runs/preview` | Render the PHREEQC input without running it |
@@ -121,12 +121,12 @@ Errors are RFC-7807 problem documents with a stable `code` (`phreeqc_timeout`,
 on prose.
 
 ```bash
-# A site that actually has chemistry (state provider), not a USGS- id, see the note up top
-curl -s localhost:8000/v1/sites/ready?source=wqp\&bbox=-105.3,39.9,-105.1,40.1\&start=2015-01-01 | jq '.[0]'
+# USGS sites that carry the required chemistry in an area (live USGS Samples query)
+curl -s "localhost:8000/v1/sites/ready?source=wqp&bbox=-105.5,39.5,-104.5,40.5&start=2020-01-01" | jq '.[0]'
 
 curl -s -X POST localhost:8000/v1/runs \
   -H 'content-type: application/json' \
-  -d '{"sample":{"site_id":"21COL001_WQX-5605","measurements":[
+  -d '{"sample":{"site_id":"USGS-09071750","measurements":[
         {"key":"ph","value":7.4,"unit":"std units"},
         {"key":"ca","value":88,"unit":"mg/l"},
         {"key":"alk_caco3","value":250,"unit":"mg/l"}]},
@@ -142,7 +142,7 @@ tool into a way to assemble training data:
 
 | Script | What it does |
 |---|---|
-| [`ops/find_ready_sites.py`](ops/find_ready_sites.py) | Lists WQP sites that carry all required analytes (`--state`/`--bbox`, `--provider`, `--min-required`) |
+| [`ops/find_ready_sites.py`](ops/find_ready_sites.py) | Lists USGS sites (Samples API) that carry all required analytes (`--state`/`--bbox`, `--min-required`) |
 | [`ops/seed_demo_data.py`](ops/seed_demo_data.py) | Generates a charge-balanced synthetic time series and writes it to the database (`--from-db` source, Supabase-ready) |
 | [`ops/build_ml_dataset.py`](ops/build_ml_dataset.py) | Builds a flat **input+output** CSV: `--from-db`, `--sites`, or `--discover --state CO`; `--bucket event/month/quarter/year/window` |
 
@@ -152,7 +152,7 @@ mineral, the ML targets), and `meta_*` (database SHA-256, engine version) for
 reproducibility. In the UI, **Model a sample → Build dataset** and **Find sites →
 multi-select → Build dataset** produce the same table for download.
 
-Because real per-sampling-event WQP records are sparse (a visit rarely measures the whole
+Because real per-sampling-event records are sparse (a visit rarely measures the whole
 ion suite), the `month`/`quarter`/`year` buckets aggregate a period's events into one
 *complete* analysis. Use `--bucket year` (or month) for usable rows; `event` keeps real
 dates but many rows will be incomplete.

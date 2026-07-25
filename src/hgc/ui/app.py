@@ -73,24 +73,22 @@ st.sidebar.caption(
 if page == "Find sites":
     st.header("Find monitoring sites")
 
-    # Each source maps to (backend source, WQP provider). "nwis" is the raw USGS site
-    # catalogue; "wqp" filters to sites that actually carry the required chemistry;
-    # "synthetic" lists whatever is seeded in the local database.
+    # "nwis" is the WDFN OGC site catalogue (every monitoring location); "wqp" filters to
+    # sites that actually carry the required chemistry (USGS Samples API); "synthetic" lists
+    # whatever is seeded in the local database. ("wqp"/"nwis" kept as backend source keys.)
     SOURCES = {
-        "USGS site catalog (NWIS)": ("nwis", None),
-        "Has chemistry — WQP, all providers": ("wqp", None),
-        "Has chemistry — WQP, NWIS (USGS)": ("wqp", "NWIS"),
-        "Has chemistry — WQP, STORET (state / other)": ("wqp", "STORET"),
-        "Has chemistry — WQP, NGWMN (groundwater)": ("wqp", "NGWMN"),
-        "Synthetic demo (local database)": ("synthetic", None),
+        "Site catalog (USGS Water Data)": "nwis",
+        "Has chemistry (USGS Samples)": "wqp",
+        "Synthetic demo (local database)": "synthetic",
     }
     source_label = st.selectbox(
         "Data source",
         list(SOURCES),
-        help="NWIS lists every monitoring location. WQP filters to sites with the required "
-        "analytes (live query). Synthetic lists the seeded demo sites.",
+        help="The catalog lists every monitoring location. 'Has chemistry' filters to sites "
+        "with the required analytes (live USGS Samples query). Synthetic lists the seeded demo sites.",
     )
-    source, provider = SOURCES[source_label]
+    source = SOURCES[source_label]
+    provider = None
 
     state = bbox = None
     no_limit = False
@@ -107,11 +105,10 @@ if page == "Find sites":
             start = col_s.date_input("From", date.today() - timedelta(days=365 * 6))
             end = col_e.date_input("To", date.today())
             st.caption(
-                "WQP is a live query. A bounding box returns in seconds; a whole state can "
-                "take up to a minute. NWIS (USGS) discrete data has largely left the WQP, so "
-                "that provider often returns nothing — try STORET or all providers."
+                "Live USGS Samples query. A bounding box returns in seconds; a whole state can "
+                "take a minute or more. Results carry coordinates, so they appear on the map."
             )
-        else:  # nwis
+        else:  # nwis / site catalog
             no_limit = st.checkbox("No limit", help="Return every matching site (can be a lot)")
             limit = st.number_input("Max sites", 10, 5000, 200, step=10, disabled=no_limit)
 

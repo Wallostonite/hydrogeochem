@@ -33,16 +33,16 @@ isolated PHREEQC workers, and a thin UI, around a shared domain library that own
 ## 2. Requirements
 
 ### Functional
-1. Search USGS monitoring locations by state, bounding box, or site ID.
-2. Retrieve water-quality results for a site over a date range from the Water Quality Portal.
+1. Search USGS monitoring locations by state, bounding box, or site ID (WDFN OGC API).
+2. Retrieve water-quality results for a site over a date range from the USGS Samples API.
 3. Normalise heterogeneous results into a canonical `WaterSample` (units, speciation basis, censored values).
 4. Generate a PHREEQC `SOLUTION` block with correct units and charge balance from a sample.
 5. Run speciation / equilibrium-phase models and return saturation indices, totals, ionic strength.
 6. Accept expert-authored custom PHREEQC input, sandboxed.
 7. Persist runs so results are reproducible and citable; batch many sites into one job.
 8. Export results as CSV/Parquet and a signed report.
-9. Discover sites that carry the required analytes (WQP finder, by state/bbox/provider), since the
-   raw NWIS catalogue lists locations without regard to what was measured.
+9. Discover sites that carry the required analytes (Samples-API finder, by state/bbox), since the
+   raw site catalogue lists locations without regard to what was measured.
 10. Emit a flat, ML-ready dataset per site (or across many): each row one sample, inputs joined with
     model outputs and a saturation index per phase, at a chosen time resolution.
 
@@ -76,8 +76,8 @@ flowchart LR
     RD --> W[Celery workers<br/>hgc-worker]
     W --> ENG
     W --> PG
-    API --> NWIS[USGS NWIS<br/>site service]
-    API --> WQP[Water Quality Portal<br/>results]
+    API --> OGC[WDFN OGC API<br/>monitoring-locations]
+    API --> SAMP[USGS Samples API<br/>discrete chemistry]
     API --> OBJ[(S3<br/>exports, raw outputs)]
 ```
 
@@ -144,20 +144,20 @@ be told why, not silently truncated.
 
 ### 4.4 Ingest and normalisation
 
-`services/usgs.py` exposes a `WaterDataSource` port with two adapters (NWIS RDB for sites, WQP CSV
-for results). Everything upstream-specific, retries with jittered exponential backoff on 5xx/429,
-30 s timeouts, response caching keyed by a canonical request hash, lives behind that port. Swapping
-in `dataretrieval` or a local CSV for tests is a constructor argument.
+`services/usgs.py` exposes a `WaterDataSource` port with two adapters over USGS **Water Data for the
+Nation (WDFN)**: the OGC monitoring-locations API for sites (GeoJSON) and the Samples Data API for
+chemistry (CSV, `basicphyschem` profile). Everything upstream-specific, retries with jittered backoff
+on 5xx/429, timeouts, response caching keyed by a canonical request hash, lives behind that port.
+Swapping in a local CSV for tests is a constructor argument.
 
-> **Upstream reality (2024):** USGS discrete water-quality data has largely **left the WQP**, so the
-> NWIS provider now returns essentially nothing for `USGS-…` sites. The retrievable chemistry comes
-> from state/other providers (STORET/WQX). USGS's own discrete data moved to the newer Water Data /
-> Samples API (`api.waterdata.usgs.gov`), and the legacy NWIS WaterServices used for **site search**
-> is slated for decommission in early 2027. The `WaterDataSource` port is exactly the seam to add a
-> `dataretrieval`/Samples-API adapter without touching the domain or the API layer.
+> **Why WDFN (the 2024–2027 migration):** the legacy NWISWeb/WaterServices site service is being
+> decommissioned in early 2027, and USGS discrete water-quality data left the Water Quality Portal for
+> the Samples API in 2024. This app was migrated off both. It now uses the OGC monitoring-locations API
+> for site search and the Samples API for chemistry, so `USGS-…` sites return real, coordinate-tagged
+> analyses again. The `WaterDataSource` port made this a swap of one module, not a rewrite.
 
-Two search surfaces sit on this port. `GET /v1/sites` is the raw NWIS site catalogue (every location,
-unfiltered). `GET /v1/sites/ready` groups WQP results by station and returns only sites carrying the
+Two search surfaces sit on this port. `GET /v1/sites` is the WDFN site catalogue (every location,
+unfiltered). `GET /v1/sites/ready` groups Samples-API results by station and returns only sites carrying the
 required analytes (`source=wqp` with an optional `provider`, or `source=synthetic` reading the local
 `sample` table). `GET /v1/sites/{id}/dataset` is the ML export: it aggregates a site's samples into
 time buckets (event/month/quarter/year/window), models each, and emits one flat row per bucket with
@@ -238,7 +238,7 @@ Raw PHREEQC text output over 1 MB goes to object storage; the row keeps the key.
 
 | Failure | Detection | Response |
 |---|---|---|
-| WQP slow or 503 | timeout / status | Retry ×3 with jitter, then serve stale cache with `stale=true`, else `503 upstream_unavailable` |
+| Upstream (USGS) slow or 503 | timeout / status | Retry ×3 with jitter, then serve stale cache with `stale=true`, else `503 upstream_unavailable` |
 | PHREEQC hangs | future timeout | Kill child, recycle pool, `504 phreeqc_timeout`, run marked failed with input retained |
 | PHREEQC convergence error | non-zero return + error string | `422` with the parsed PHREEQC error lines, these are user-actionable (e.g. missing element for a requested phase) |
 | Pool broken (`BrokenProcessPool`) | executor exception | Rebuild pool once, fail the request, alert if rate > 1/min |
@@ -268,7 +268,7 @@ Every error is a typed `HgcError` mapped to an RFC-7807 problem document with a 
   `runs:custom` (raw PHREEQC input), `admin`.
 - AuthZ at the repository boundary, every query is filtered by project membership.
 - Rate limits per principal: 60 req/min general, 10 runs/min, 1 batch job at a time.
-- Containers: non-root, read-only rootfs, dropped capabilities, no egress except USGS/WQP.
+- Containers: non-root, read-only rootfs, dropped capabilities, no egress except USGS WDFN APIs.
 - Secrets from the environment/secret manager, never in images or the database.
 - PII: none by design. Site coordinates are public data; project names may be sensitive, so log
   identifiers, not names.
@@ -307,7 +307,7 @@ flowchart LR
 | Layer | What is tested | How |
 |---|---|---|
 | domain | unit conversion, alkalinity basis, charge balance, input rendering | pure pytest, golden files for `SOLUTION` blocks |
-| services | retry/backoff, cache keys, WQP parsing, sanitizer rejections | `respx`-mocked HTTP, fixture CSVs |
+| services | retry/backoff, cache keys, Samples/OGC parsing, sanitizer rejections | `respx`-mocked HTTP, fixture CSVs |
 | engine | timeout → recycle, database checksum, SI parsing | real IPhreeqc where available, skipped otherwise |
 | api | auth, error mapping, idempotency, 202 flow | `httpx.ASGITransport` |
 | scientific regression | SI for a known analysis (e.g. NIST/USGS example 1) within tolerance | nightly, tolerance ±0.01 SI |

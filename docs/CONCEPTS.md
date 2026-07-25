@@ -26,16 +26,16 @@ A hydrogeologist wants to answer a question like: *is the groundwater at this we
 to clog my pipes with limestone, or eat through them?*
 
 Answering it takes two things. First, measurements, how much calcium, sulfate, chloride
-and so on is dissolved in the water. Government agencies have been collecting these for
-decades and publish them free through the Water Quality Portal. Second, a calculation: given those measurements, which minerals will dissolve and which will crystallise out.
-There is a famous piece of government software called PHREEQC that does exactly this
+and so on is dissolved in the water. The US Geological Survey has been collecting these for
+decades and now publishes them through its modern Water Data for the Nation service. Second, a
+calculation: given those measurements, which minerals will dissolve and which will crystallise
+out. There is a famous piece of government software called PHREEQC that does exactly this
 calculation, and has done since the 1980s.
 
-> A practical wrinkle worth knowing: as of 2024 the US Geological Survey moved its own
-> discrete measurements out of the shared portal, so a "USGS" site usually comes back
-> empty. The data that is still there comes from state agencies and other contributors.
-> The tool now has a *finder* that locates sites which actually have the measurements you
-> need, rather than making you guess.
+> A practical note: the USGS retired its old data websites and moved everything to a new
+> platform (Water Data for the Nation). This tool reads from the new one, so a "USGS" site
+> returns real measurements. Because a single visit rarely measures everything, the tool has
+> a *finder* that locates sites which actually have the measurements you need.
 
 The gap between the two is entirely manual. Someone downloads a spreadsheet, retypes
 numbers into a text file in PHREEQC's own input language, runs it, and reads the output.

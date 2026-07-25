@@ -47,9 +47,11 @@ class Settings(BaseSettings):
     # are queued. Keeps the API responsive without forcing polling on trivial work.
     sync_run_deadline_s: float = 5.0
 
-    # --- upstreams -----------------------------------------------------------
-    nwis_base_url: str = "https://waterservices.usgs.gov/nwis"
-    wqp_base_url: str = "https://www.waterqualitydata.us/data"
+    # --- upstreams (USGS Water Data for the Nation) --------------------------
+    # OGC monitoring-locations API for site search; Samples Data API for chemistry.
+    # These replace the retired NWISWeb/WaterServices site service and the Water Quality Portal.
+    wdfn_ogc_base_url: str = "https://api.waterdata.usgs.gov/ogcapi/v0"
+    samples_base_url: str = "https://api.waterdata.usgs.gov/samples-data"
     http_timeout_s: float = 30.0
     http_max_retries: int = 3
     http_user_agent: str = "hydrogeochem/1.0 (+https://example.org/hydrogeochem)"
