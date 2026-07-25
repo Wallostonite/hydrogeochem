@@ -12,6 +12,7 @@ the system sees only `SiteSummary`, `WaterSample`, and `ReadySite`.
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 from dataclasses import dataclass
@@ -167,62 +168,85 @@ class UsgsClient:
     async def find_ready_sites(
         self,
         *,
-        start: date,
-        end: date,
         state: str | None = None,
         bbox: tuple[float, float, float, float] | None = None,
+        start: date | None = None,  # retained for API compatibility; not needed to find sites
+        end: date | None = None,
         provider: str | None = None,  # retained for API compatibility; Samples API is USGS-only
         min_required: int | None = None,
         limit: int = 200,
     ) -> list[ReadySite]:
         """USGS sites that carry the analytes a speciation model needs.
 
-        Asks the Samples API for the required characteristics over an area, groups the results
-        by monitoring location, and keeps those meeting ``min_required``.
+        Uses the Samples ``locations`` endpoint (which returns the *site list* for a
+        characteristic, not every measurement), one concurrent query per required analyte.
+        A site is ready if it carries at least ``min_required`` of them. No date range is
+        needed here — that only matters when you later pull a site's samples to model.
         """
-        if start > end:
-            raise ValidationError("start date must not be after end date")
         if not (state or bbox):
             raise ValidationError("provide a state or a bounding box")
 
-        required = set(REQUIRED_FOR_SPECIATION)
+        required = list(REQUIRED_FOR_SPECIATION)
         threshold = min_required or len(required)
-        params: dict[str, Any] = {
-            "mimeType": "text/csv",
-            "characteristic": _required_characteristic_names(),
-            "activityStartDateLower": start.isoformat(),
-            "activityStartDateUpper": end.isoformat(),
-        }
+        base: dict[str, Any] = {"mimeType": "text/csv"}
         if state:
-            params["stateFips"] = f"US:{_state_fips(state)}"
+            base["stateFips"] = f"US:{_state_fips(state)}"
         if bbox:
-            params["boundingBox"] = _bbox_str(bbox)
+            base["boundingBox"] = _bbox_str(bbox)
 
-        key = cache_key("ready", params)
+        key = cache_key("ready", {**base, "threshold": threshold})
         cached = self._cache.get(key)
         if cached is None:
-            # A whole-state pull is a large, slow CSV; give it far more room than a normal call.
-            text = await self._get_text(
-                f"{self._cfg.samples_base}/results/{_SAMPLES_PROFILE}", params, timeout=110.0
-            )
-            cached = _group_ready_sites(_iter_csv(text))
-            self._cache.set(key, cached, self._cfg.ttl_results_s)
+            per_key = await asyncio.gather(*[self._locations_for_key(base, k) for k in required])
+            sites: dict[str, dict[str, Any]] = {}
+            for k, locations in zip(required, per_key, strict=True):
+                for loc in locations:
+                    entry = sites.setdefault(loc["site_id"], {**loc, "keys": []})
+                    if k not in entry["keys"]:
+                        entry["keys"].append(k)
+            cached = list(sites.values())
+            self._cache.set(key, cached, self._cfg.ttl_sites_s)
 
         ready = [
             ReadySite(
-                site_id=row["site_id"],
-                name=row["name"] or row["site_id"],
-                latitude=row.get("lat"),
-                longitude=row.get("lon"),
+                site_id=r["site_id"],
+                name=r["name"] or r["site_id"],
+                latitude=r.get("lat"),
+                longitude=r.get("lon"),
                 source="usgs",
-                analytes=row["analytes"],
-                missing=sorted(required - set(row["keys"])),
+                analytes=sorted(r["keys"]),
+                missing=sorted(set(required) - set(r["keys"])),
             )
-            for row in cached
-            if len(set(row["keys"]) & required) >= threshold
+            for r in cached
+            if len(set(r["keys"])) >= threshold
         ]
         ready.sort(key=lambda s: (-len(s.analytes), s.site_id))
         return ready[:limit] if limit else ready
+
+    async def _locations_for_key(self, base: dict[str, Any], key: str) -> list[dict[str, Any]]:
+        """Sites (from the Samples locations endpoint) that report the analyte ``key``."""
+        params = {**base, "characteristic": _characteristic_names_for(key)}
+        text = await self._get_text(
+            f"{self._cfg.samples_base}/locations/site", params, timeout=60.0
+        )
+        out: list[dict[str, Any]] = []
+        for row in _iter_csv(text):
+            site_id = (row.get("Location_Identifier") or "").strip()
+            if not site_id:
+                continue
+            out.append(
+                {
+                    "site_id": site_id,
+                    "name": (row.get("Location_Name") or "").strip(),
+                    "lat": _float(
+                        row.get("Location_LatitudeStandardized") or row.get("Location_Latitude")
+                    ),
+                    "lon": _float(
+                        row.get("Location_LongitudeStandardized") or row.get("Location_Longitude")
+                    ),
+                }
+            )
+        return out
 
     # -- results (USGS Samples API) -----------------------------------------------
 
@@ -255,15 +279,10 @@ class UsgsClient:
 # ------------------------------------------------------------------ parsing helpers
 
 
-def _required_characteristic_names() -> list[str]:
-    """Characteristic names to request for the required keys (label + every alias)."""
-    names: list[str] = []
-    for key in REQUIRED_FOR_SPECIATION:
-        param = BY_KEY[key]
-        for name in (param.label, *param.aliases):
-            if name not in names:
-                names.append(name)
-    return names
+def _characteristic_names_for(key: str) -> list[str]:
+    """Every characteristic-name spelling (label + aliases) that resolves to one registry key."""
+    param = BY_KEY[key]
+    return list(dict.fromkeys([param.label, *param.aliases]))
 
 
 def _parse_ogc_features(payload: dict[str, Any]) -> list[SiteSummary]:
@@ -290,34 +309,6 @@ def _parse_ogc_features(payload: dict[str, Any]) -> list[SiteSummary]:
             )
         )
     return sites
-
-
-def _group_ready_sites(rows: Iterable[dict[str, str]]) -> list[dict[str, Any]]:
-    """Group Samples-API result rows into per-station required-analyte coverage."""
-    stations: dict[str, dict[str, Any]] = {}
-    required = set(REQUIRED_FOR_SPECIATION)
-    for row in rows:
-        pcode = (row.get("USGSpcode") or "").strip()
-        characteristic = (row.get("Result_Characteristic") or "").strip()
-        param = (lookup(pcode) if pcode else None) or lookup(characteristic)
-        if param is None or param.key not in required:
-            continue
-        site_id = (row.get("Location_Identifier") or "").strip()
-        if not site_id:
-            continue
-        entry = stations.setdefault(
-            site_id, {"site_id": site_id, "name": "", "keys": [], "lat": None, "lon": None}
-        )
-        if param.key not in entry["keys"]:
-            entry["keys"].append(param.key)
-        if not entry["name"]:
-            entry["name"] = (row.get("Location_Name") or "").strip()
-        if entry["lat"] is None:
-            entry["lat"] = _float(row.get("Location_LatitudeStandardized") or row.get("Location_Latitude"))
-            entry["lon"] = _float(row.get("Location_LongitudeStandardized") or row.get("Location_Longitude"))
-    for entry in stations.values():
-        entry["analytes"] = sorted(entry["keys"])
-    return list(stations.values())
 
 
 def normalise_samples_rows(rows: Iterable[dict[str, str]], site_id: str) -> list[WaterSample]:

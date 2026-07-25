@@ -100,12 +100,6 @@ if page == "Find sites":
         col_state, col_bbox = st.columns([1, 3])
         state = col_state.text_input("State code", "CO", max_chars=2)
         bbox = col_bbox.text_input("Bounding box (west,south,east,north)", "")
-        if source == "wqp":
-            col_s, col_e = st.columns(2)
-            # Default to a short 2-year window: the Samples query slows sharply over long
-            # windows in data-dense areas. Widen it only if a search returns too few sites.
-            start = col_s.date_input("From", date.today() - timedelta(days=365 * 2))
-            end = col_e.date_input("To", date.today())
 
         # Limit controls on both catalog and chemistry sources.
         col_nl, col_lim = st.columns([1, 3])
@@ -114,9 +108,9 @@ if page == "Find sites":
 
         if source == "wqp":
             st.caption(
-                "Live USGS Samples query. To load faster, narrow the date range or use a bounding "
-                "box; a whole state over many years can take a minute or more. 'Max sites' caps the "
-                "list returned, but the query still scans the whole area. Results carry coordinates."
+                "Finds USGS sites that carry the required analytes (Samples locations query). No "
+                "date range needed here, that only matters when you model a site. A bounding box "
+                "is fastest. Results carry coordinates, so they appear on the map."
             )
         else:
             st.caption(
@@ -138,8 +132,7 @@ if page == "Find sites":
                 else:
                     found = client.ready_sites(
                         source="wqp", provider=provider,
-                        state=state or None, bbox=bbox or None, start=start, end=end,
-                        limit=capped,
+                        state=state or None, bbox=bbox or None, limit=capped,
                     )
         except ApiError as exc:
             show_error(exc)
@@ -274,10 +267,12 @@ elif page == "Model a sample":
 
     with tab_fetch:
         # Keyed so "Model this site" on the Find sites page can prefill it.
-        st.session_state.setdefault("model_site_id", "USGS-06730200")
+        st.session_state.setdefault("model_site_id", "USGS-09071750")
         site_id = st.text_input("Site identifier", key="model_site_id")
         col_a, col_b, col_c = st.columns(3)
-        start = col_a.date_input("From", date.today() - timedelta(days=730))
+        # Wide default window: the finder surfaces sites with data across all time, and a
+        # single-site fetch is cheap, so cast a wide net and let the user narrow it.
+        start = col_a.date_input("From", date.today() - timedelta(days=365 * 20))
         end = col_b.date_input("To", date.today())
         aggregate = col_c.selectbox("Combine analyses by", ["median", "mean", "latest"])
         phases = st.multiselect(
