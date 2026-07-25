@@ -102,7 +102,9 @@ if page == "Find sites":
         bbox = col_bbox.text_input("Bounding box (west,south,east,north)", "")
         if source == "wqp":
             col_s, col_e = st.columns(2)
-            start = col_s.date_input("From", date.today() - timedelta(days=365 * 6))
+            # Default to a short 2-year window: the Samples query slows sharply over long
+            # windows in data-dense areas. Widen it only if a search returns too few sites.
+            start = col_s.date_input("From", date.today() - timedelta(days=365 * 2))
             end = col_e.date_input("To", date.today())
 
         # Limit controls on both catalog and chemistry sources.
