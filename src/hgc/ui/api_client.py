@@ -115,10 +115,12 @@ class ApiClient:
         phases: list[str] | None = None,
         bucket: str = "year",
         aggregate: str = "median",
+        source: str = "usgs",
     ) -> list[dict[str, Any]]:
         params: dict[str, Any] = {
             "start": start.isoformat(), "end": end.isoformat(),
             "database": database, "bucket": bucket, "aggregate": aggregate,
+            "source": source,
         }
         if phases:
             params["phases"] = phases

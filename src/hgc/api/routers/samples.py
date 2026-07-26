@@ -16,6 +16,23 @@ from ..security import SCOPE_SITES_READ, Principal, rate_limit_general
 router = APIRouter(tags=["samples"])
 
 
+async def _samples_for(
+    container: ContainerDep, site_id: str, start: date, end: date, source: str
+) -> list[WaterSample]:
+    """Where a site's analyses come from: the local DB for seeded synthetic sites, the live
+    USGS Samples API otherwise. Synthetic sites do not exist upstream, so a DB read is the
+    only way to model them."""
+    if source == "synthetic":
+        if container.session_factory is None:
+            return []  # no database configured (e.g. test mode)
+        from ...db.repository import db_samples_for_site
+
+        return await run_in_threadpool(
+            db_samples_for_site, container.session_factory, site_id, start, end
+        )
+    return await container.samples.samples_for_site(site_id, start, end)
+
+
 class SampleCollection(BaseModel):
     site_id: str
     count: int
@@ -32,6 +49,7 @@ async def site_samples(
     start: date = Query(...),
     end: date = Query(...),
     aggregate: str = Query(default="median", pattern="^(mean|median|latest|none)$"),
+    source: str = Query(default="usgs", pattern="^(usgs|wqp|synthetic)$"),
 ) -> SampleCollection:
     """Normalised analyses for a site, plus the representative sample a model would use.
 
@@ -39,7 +57,7 @@ async def site_samples(
     than presenting a confident saturation index derived from an incomplete analysis.
     """
     principal.require(SCOPE_SITES_READ)
-    samples = await container.samples.samples_for_site(site_id, start, end)
+    samples = await _samples_for(container, site_id, start, end, source)
 
     representative = None
     readiness = None
@@ -70,15 +88,19 @@ async def site_dataset(
     phases: Annotated[list[str] | None, Query()] = None,
     bucket: str = Query(default="event", pattern="^(event|month|quarter|year|window)$"),
     aggregate: str = Query(default="median", pattern="^(mean|median|latest)$"),
+    source: str = Query(default="usgs", pattern="^(usgs|wqp|synthetic)$"),
 ) -> list[dict[str, Any]]:
     """One record per sample: inputs joined with the outputs of modelling it.
 
     `bucket` controls the time resolution: `event` keeps every sampling event (real dates,
     but individual WQP samples are often sparse); `month`/`quarter`/`year` aggregate each
     period into one complete analysis; `window` collapses the whole range to a single row.
+
+    `source=synthetic` reads the seeded demo samples from the local database; the default
+    pulls live analyses from the USGS Samples API.
     """
     principal.require(SCOPE_SITES_READ)
-    samples = await container.samples.samples_for_site(site_id, start, end)
+    samples = await _samples_for(container, site_id, start, end, source)
     if not samples:
         return []
 

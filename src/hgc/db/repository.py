@@ -6,12 +6,20 @@ and the whole test suite can run without a database.
 
 from __future__ import annotations
 
+from datetime import date, datetime, time
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from ..domain.models import ModelResult, ModelRun, ReadySite, RunStatus
+from ..domain.models import (
+    Measurement,
+    ModelResult,
+    ModelRun,
+    ReadySite,
+    RunStatus,
+    WaterSample,
+)
 from ..domain.parameters import REQUIRED_FOR_SPECIATION
 from .models import ModelRunRow, SampleRow
 
@@ -100,6 +108,40 @@ class SqlRunRepository:
         with self._factory() as session:
             stmt = select(ModelRunRow).order_by(ModelRunRow.created_at.desc()).limit(limit)
             return [_to_domain(row) for row in session.execute(stmt).scalars()]
+
+
+def db_samples_for_site(
+    session_factory: sessionmaker[Session], site_id: str, start: date, end: date
+) -> list[WaterSample]:
+    """Samples for a site read straight from the local `sample` table.
+
+    This is the modelling counterpart to `synthetic_sites`: the seeded demo sites live only
+    in the database, never in USGS, so a dataset build for them has to read here rather than
+    calling the Samples API. Returns the same `WaterSample` shape the upstream client yields.
+    """
+    lo = datetime.combine(start, time.min)
+    hi = datetime.combine(end, time.max)
+    with session_factory() as session:
+        stmt = (
+            select(SampleRow)
+            .where(
+                SampleRow.site_id == site_id,
+                SampleRow.sampled_at >= lo,
+                SampleRow.sampled_at <= hi,
+            )
+            .order_by(SampleRow.sampled_at)
+        )
+        return [
+            WaterSample(
+                site_id=row.site_id,
+                sampled_at=row.sampled_at,
+                latitude=row.latitude,
+                longitude=row.longitude,
+                source=row.source,
+                measurements=[Measurement(**m) for m in (row.measurements or [])],
+            )
+            for row in session.execute(stmt).scalars()
+        ]
 
 
 def synthetic_sites(session_factory: sessionmaker[Session], limit: int = 500) -> list[ReadySite]:

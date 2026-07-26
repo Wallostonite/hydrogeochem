@@ -141,6 +141,9 @@ if page == "Find sites":
         else:
             # Persist so a row click (which reruns the script) does not clear the results.
             st.session_state["found_sites"] = found
+            # Remember which source these came from: synthetic sites must be modelled from
+            # the database, not the live USGS API (they do not exist upstream).
+            st.session_state["found_source"] = source
 
     sites = st.session_state.get("found_sites")
     if sites is not None:
@@ -225,14 +228,16 @@ if page == "Find sites":
                                 f"sites to stay responsive."
                             )
                         client = get_client()
+                        build_source = st.session_state.get("found_source", "usgs")
                         records: list[dict[str, Any]] = []
                         progress = st.progress(0.0, text="Modelling selected sites...")
                         for i, sid in enumerate(targets):
-                            # a site with no WQP data just contributes no rows
+                            # a site with no data for the window just contributes no rows
                             with contextlib.suppress(ApiError):
                                 records.extend(
                                     client.dataset(sid, ds_start, ds_end,
-                                                   database=database, bucket=ds_bucket)
+                                                   database=database, bucket=ds_bucket,
+                                                   source=build_source)
                                 )
                             progress.progress((i + 1) / len(targets))
                         progress.empty()
