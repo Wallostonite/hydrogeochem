@@ -176,12 +176,16 @@ def normalise_url(url: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     settings = get_settings()
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--years", type=int, default=10, help="Length of the time series in years")
-    parser.add_argument("--per-year", type=int, default=4, help="Samples per site per year (4 = quarterly)")
+    parser.add_argument("--per-year", type=int, default=4,
+                        help="Samples per site per year (4 = quarterly)")
     parser.add_argument("--runs", type=int, default=None,
                         help="Number of model runs (default: one per site, on its latest sample)")
-    parser.add_argument("--owner", default=None, help="Project owner (default: HGC service account)")
+    parser.add_argument("--owner", default=None,
+                        help="Project owner (default: HGC service account)")
     parser.add_argument("--seed", type=int, default=42, help="RNG seed for reproducible data")
     parser.add_argument("--reset", action="store_true", help="Delete existing demo rows first")
     parser.add_argument("--dry-run", action="store_true", help="Build and summarise; write nothing")
@@ -249,7 +253,8 @@ def main(argv: list[str] | None = None) -> int:
         input_text = (
             f"TITLE demo run {i}\nSOLUTION 1 {s.site_id}\n    units mg/l\n"
             + f"    pH {s.ph}\n    temp {s.temperature_c}\n"
-            + "".join(f"    {m.key:<10} {m.value}\n" for m in s.measurements if m.key not in ("ph", "temperature"))
+            + "".join(f"    {m.key:<10} {m.value}\n" for m in s.measurements
+                      if m.key not in ("ph", "temperature"))
             + "END\n"
         )
         result = synth_result(s, rng)
@@ -272,12 +277,14 @@ def main(argv: list[str] | None = None) -> int:
 
     span_lo = min(s["sampled_at"] for s in samples)
     span_hi = max(s["sampled_at"] for s in samples)
-    print(f"Built {len(projects)} projects, {len(samples)} samples, {len(runs)} runs.", file=sys.stderr)
+    print(f"Built {len(projects)} projects, {len(samples)} samples, {len(runs)} runs.",
+          file=sys.stderr)
     print(f"Time series: {len(DEMO_SITES)} sites x {points} points "
           f"({args.per_year}/yr over {args.years} yr), {span_lo:%Y-%m-%d} .. {span_hi:%Y-%m-%d}",
           file=sys.stderr)
     cbe = [s["charge_balance_pct"] for s in samples]
-    print(f"Charge-balance range: {min(cbe):+.1f}% .. {max(cbe):+.1f}%  (within +/-10% is analytically sound)",
+    print(f"Charge-balance range: {min(cbe):+.1f}% .. {max(cbe):+.1f}%  "
+          "(within +/-10% is analytically sound)",
           file=sys.stderr)
 
     if args.dry_run:
@@ -309,7 +316,8 @@ def main(argv: list[str] | None = None) -> int:
 
     with Session(engine) as session:
         if args.reset:
-            session.execute(delete(ModelRunRow).where(ModelRunRow.database_sha256 == hashlib.sha256(b"demo").hexdigest()))
+            demo_sha = hashlib.sha256(b"demo").hexdigest()
+            session.execute(delete(ModelRunRow).where(ModelRunRow.database_sha256 == demo_sha))
             owners = {p["owner"] for p in projects}
             for o in owners:
                 session.execute(delete(Project).where(Project.owner == o))
@@ -331,7 +339,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         session.commit()
 
-    print(f"\nWrote {len(projects)} projects, {len(samples)} samples, {len(runs)} runs to the database.")
+    print(f"\nWrote {len(projects)} projects, {len(samples)} samples, "
+          f"{len(runs)} runs to the database.")
     return 0
 
 

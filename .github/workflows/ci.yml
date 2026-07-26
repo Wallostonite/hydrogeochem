@@ -14,7 +14,7 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: pip install -e ".[dev,ui]"
-      - run: ruff check src tests
+      - run: ruff check src tests ops
       - run: mypy src
       - run: HGC_ENV=test pytest --cov=hgc --cov-report=term-missing
       # The scientific regression suite runs against a real IPhreeqc install and

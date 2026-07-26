@@ -81,8 +81,13 @@ def _new_client(settings):
     from hgc.services.usgs import HttpConfig, UsgsClient
 
     return UsgsClient(
-        HttpConfig(ogc_base=settings.wdfn_ogc_base_url, samples_base=settings.samples_base_url,
-                   api_key=settings.usgs_api_key, timeout_s=120.0, user_agent=settings.http_user_agent),
+        HttpConfig(
+            ogc_base=settings.wdfn_ogc_base_url,
+            samples_base=settings.samples_base_url,
+            api_key=settings.usgs_api_key,
+            timeout_s=120.0,
+            user_agent=settings.http_user_agent,
+        ),
         cache=build_cache(None),
     )
 
@@ -130,7 +135,9 @@ def discover_sites(
 def main(argv: list[str] | None = None) -> int:
     settings = get_settings()
     today = date.today()
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     src = parser.add_mutually_exclusive_group(required=True)
     src.add_argument("--from-db", action="store_true", help="Read samples from the database")
     src.add_argument("--sites", nargs="+", metavar="SITE_ID", help="One or more WQP site ids")
@@ -139,7 +146,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--bbox", help="For --discover: west,south,east,north")
     parser.add_argument("--provider", default=None, help="WQP provider filter (NWIS/STORET/NGWMN)")
     parser.add_argument("--max-sites", type=int, default=25, help="Cap on discovered sites")
-    parser.add_argument("--start", type=date.fromisoformat, default=today.replace(year=today.year - 10))
+    parser.add_argument(
+        "--start", type=date.fromisoformat, default=today.replace(year=today.year - 10)
+    )
     parser.add_argument("--end", type=date.fromisoformat, default=today)
     parser.add_argument("--bucket", choices=list(BUCKETS), default="year",
                         help="Row resolution: event/month/quarter/year/window (default year)")
@@ -212,7 +221,10 @@ def main(argv: list[str] | None = None) -> int:
     frame.to_csv(args.output, index=False)
 
     ok = (frame["out_status"] == "succeeded").sum()
-    print(f"\nWrote {len(frame)} rows x {len(frame.columns)} columns to {args.output}", file=sys.stderr)
+    print(
+        f"\nWrote {len(frame)} rows x {len(frame.columns)} columns to {args.output}",
+        file=sys.stderr,
+    )
     print(f"{ok} modelled successfully, {len(frame) - ok} failed/incomplete.", file=sys.stderr)
     return 0
 
