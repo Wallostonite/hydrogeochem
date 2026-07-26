@@ -20,8 +20,11 @@ from hgc.ui.api_client import ApiClient, ApiError
 st.set_page_config(page_title="HydroGeoChem Explorer", page_icon="◎", layout="wide")
 
 
-@st.cache_resource
 def get_client() -> ApiClient:
+    # Not cached as a resource on purpose: the client is a cheap, stateless dataclass (one
+    # requests call per method, no pooled connection). Caching the *instance* only creates a
+    # stale-object trap after a redeploy that adds methods — a cached client built by the
+    # previous version would be missing them. Constructing one per call is negligible.
     return ApiClient()
 
 
