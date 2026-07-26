@@ -201,6 +201,12 @@ if page == "Find sites":
 
                 if len(ids) == 1 and st.button("Model this site →", type="primary"):
                     st.session_state["model_site_id"] = ids[0]
+                    # Carry the source so a synthetic site is modelled from the DB, not USGS.
+                    st.session_state["model_data_source"] = (
+                        "Local database (seeded/synthetic)"
+                        if st.session_state.get("found_source") == "synthetic"
+                        else "USGS (live)"
+                    )
                     st.session_state["_goto"] = "Model a sample"
                     st.rerun()
 
@@ -277,6 +283,13 @@ elif page == "Model a sample":
         # Keyed so "Model this site" on the Find sites page can prefill it.
         st.session_state.setdefault("model_site_id", "USGS-09071750")
         site_id = st.text_input("Site identifier", key="model_site_id")
+        # Live USGS by default; seeded/synthetic sites exist only in the local DB, so they
+        # must be read from there. "Model this site" carries the right choice over from Find.
+        source_labels = {"USGS (live)": "usgs", "Local database (seeded/synthetic)": "synthetic"}
+        st.session_state.setdefault("model_data_source", "USGS (live)")
+        data_source = source_labels[
+            st.radio("Data source", list(source_labels), key="model_data_source", horizontal=True)
+        ]
         col_a, col_b, col_c = st.columns(3)
         # Wide default window: the finder surfaces sites with data across all time, and a
         # single-site fetch is cheap, so cast a wide net and let the user narrow it.
@@ -298,7 +311,7 @@ elif page == "Model a sample":
         if st.button("Fetch and model", type="primary"):
             client = get_client()
             try:
-                payload = client.samples(site_id, start, end, aggregate)
+                payload = client.samples(site_id, start, end, aggregate, source=data_source)
             except ApiError as exc:
                 show_error(exc)
                 st.stop()
@@ -353,7 +366,8 @@ elif page == "Model a sample":
                     b_start = start + timedelta(days=span * i // buckets)
                     b_end = start + timedelta(days=span * (i + 1) // buckets)
                     try:
-                        bucket = client.samples(site_id, b_start, b_end, aggregate)
+                        bucket = client.samples(site_id, b_start, b_end, aggregate,
+                                                source=data_source)
                         rep = bucket.get("representative")
                         if rep:
                             sat_phases = phases or catalog["default_phases"][:4]
@@ -410,6 +424,7 @@ elif page == "Model a sample":
                     ds_records = get_client().dataset(
                         site_id, start, end, database=database,
                         phases=phases or None, bucket=ds_bucket, aggregate=aggregate,
+                        source=data_source,
                     )
             except ApiError as exc:
                 show_error(exc)

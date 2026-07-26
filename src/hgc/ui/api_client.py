@@ -98,12 +98,16 @@ class ApiClient:
         return self._request("GET", "/v1/sites/ready", params=params)
 
     def samples(
-        self, site_id: str, start: date, end: date, aggregate: str = "median"
+        self, site_id: str, start: date, end: date, aggregate: str = "median",
+        source: str = "usgs",
     ) -> dict[str, Any]:
         return self._request(
             "GET",
             f"/v1/sites/{site_id}/samples",
-            params={"start": start.isoformat(), "end": end.isoformat(), "aggregate": aggregate},
+            params={
+                "start": start.isoformat(), "end": end.isoformat(),
+                "aggregate": aggregate, "source": source,
+            },
         )
 
     def dataset(
