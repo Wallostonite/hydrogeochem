@@ -78,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         ready = asyncio.run(run())
-    except Exception as exc:  # noqa: BLE001 - a CLI should report, not traceback
+    except Exception as exc:
         print(f"Could not reach the Samples API: {exc}", file=sys.stderr)
         return 1
 

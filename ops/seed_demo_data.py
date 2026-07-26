@@ -27,7 +27,7 @@ import hashlib
 import math
 import random
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from hgc.config import get_settings
@@ -189,7 +189,7 @@ def main(argv: list[str] | None = None) -> int:
 
     rng = random.Random(args.seed)
     owner = args.owner or "demo@hydrogeochem.dev"
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # --- build rows in memory (no DB needed for this part) -----------------------
     projects = [

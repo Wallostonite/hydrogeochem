@@ -7,7 +7,9 @@ exactly what a script would get back.
 
 from __future__ import annotations
 
+import contextlib
 from datetime import date, timedelta
+from typing import Any
 
 import pandas as pd
 import plotly.express as px
@@ -24,15 +26,15 @@ def get_client() -> ApiClient:
 
 
 @st.cache_data(ttl=600)
-def load_catalog() -> dict:
+def load_catalog() -> dict[str, Any]:
     return get_client().catalog()
 
 
 def show_error(exc: ApiError) -> None:
     """Errors name what happened and what to do; they do not apologise."""
     guidance = {
-        "unsafe_phreeqc_input": "Remove the flagged keyword. File access is disabled on the server.",
-        "phreeqc_timeout": "The model exceeded the time limit. Simplify it or submit it as a batch.",
+        "unsafe_phreeqc_input": "Remove the flagged keyword. File access is disabled on server.",
+        "phreeqc_timeout": "The model exceeded the time limit. Simplify it or submit as a batch.",
         "phreeqc_error": "PHREEQC rejected the model. The message below is from the solver.",
         "upstream_unavailable": "USGS is not responding. Cached results are still available.",
         "rate_limited": "You have hit the request limit. Wait a minute and retry.",
@@ -85,7 +87,7 @@ if page == "Find sites":
         "Data source",
         list(SOURCES),
         help="The catalog lists every monitoring location. 'Has chemistry' filters to sites "
-        "with the required analytes (live USGS Samples query). Synthetic lists the seeded demo sites.",
+        "with the required analytes (live USGS Samples query). Synthetic lists seeded demo sites.",
     )
     source = SOURCES[source_label]
     provider = None
@@ -202,7 +204,9 @@ if page == "Find sites":
                 # Build one combined ML dataset across every selected site.
                 with st.expander(f"Build ML dataset for {len(ids)} selected site(s)"):
                     c1, c2, c3 = st.columns(3)
-                    ds_start = c1.date_input("From", date.today() - timedelta(days=365 * 10), key="ms_from")
+                    ds_start = c1.date_input(
+                        "From", date.today() - timedelta(days=365 * 10), key="ms_from"
+                    )
                     ds_end = c2.date_input("To", date.today(), key="ms_to")
                     ds_bucket = c3.selectbox(
                         "Rows",
@@ -221,16 +225,15 @@ if page == "Find sites":
                                 f"sites to stay responsive."
                             )
                         client = get_client()
-                        records: list[dict] = []
+                        records: list[dict[str, Any]] = []
                         progress = st.progress(0.0, text="Modelling selected sites...")
                         for i, sid in enumerate(targets):
-                            try:
+                            # a site with no WQP data just contributes no rows
+                            with contextlib.suppress(ApiError):
                                 records.extend(
                                     client.dataset(sid, ds_start, ds_end,
                                                    database=database, bucket=ds_bucket)
                                 )
-                            except ApiError:
-                                pass  # a site with no WQP data just contributes no rows
                             progress.progress((i + 1) / len(targets))
                         progress.empty()
                         if not records:
@@ -276,7 +279,9 @@ elif page == "Model a sample":
         end = col_b.date_input("To", date.today())
         aggregate = col_c.selectbox("Combine analyses by", ["median", "mean", "latest"])
         phases = st.multiselect(
-            "Report saturation indices for", catalog["default_phases"], catalog["default_phases"][:4]
+            "Report saturation indices for",
+            catalog["default_phases"],
+            catalog["default_phases"][:4],
         )
         equilibrate = st.multiselect("Equilibrate with", catalog["default_phases"], [])
         plot_series = st.checkbox(
@@ -337,7 +342,7 @@ elif page == "Model a sample":
 
                 buckets = min(max(end.year - start.year, 1), 8)
                 span = (end - start).days
-                rows: list[dict] = []
+                rows: list[dict[str, Any]] = []
                 progress = st.progress(0.0, text=f"Modelling {buckets} time buckets...")
                 for i in range(buckets):
                     b_start = start + timedelta(days=span * i // buckets)
@@ -346,12 +351,13 @@ elif page == "Model a sample":
                         bucket = client.samples(site_id, b_start, b_end, aggregate)
                         rep = bucket.get("representative")
                         if rep:
+                            sat_phases = phases or catalog["default_phases"][:4]
                             one = client.create_run(
                                 {
                                     "sample": rep,
                                     "spec": {
                                         "database": database,
-                                        "saturation_phases": phases or catalog["default_phases"][:4],
+                                        "saturation_phases": sat_phases,
                                     },
                                 }
                             )
@@ -393,26 +399,30 @@ elif page == "Model a sample":
             }[b],
         )
         if col_ds1.button("Build dataset"):
+            ds_records: list[dict[str, Any]] | None
             try:
                 with st.spinner("Modelling every sample..."):
-                    records = get_client().dataset(
+                    ds_records = get_client().dataset(
                         site_id, start, end, database=database,
                         phases=phases or None, bucket=ds_bucket, aggregate=aggregate,
                     )
             except ApiError as exc:
                 show_error(exc)
-                records = None
-            if records is not None:
-                if not records:
+                ds_records = None
+            if ds_records is not None:
+                if not ds_records:
                     st.info("No modellable samples in this window.")
                     st.session_state.pop("dataset_csv", None)
                 else:
-                    frame = pd.DataFrame(records)
+                    frame = pd.DataFrame(ds_records)
                     order = ("id_", "in_", "out_", "si_", "meta_")
-                    frame = frame[sorted(
-                        frame.columns,
-                        key=lambda c: next(((i, c) for i, p in enumerate(order) if c.startswith(p)), (5, c)),
-                    )]
+
+                    def _rank(c: str) -> tuple[int, str]:
+                        return next(
+                            ((i, c) for i, p in enumerate(order) if c.startswith(p)), (5, c)
+                        )
+
+                    frame = frame[sorted(frame.columns, key=_rank)]
                     st.session_state["dataset_csv"] = frame.to_csv(index=False)
                     st.session_state["dataset_rows"] = len(frame)
                     st.session_state["dataset_site"] = site_id
@@ -426,7 +436,9 @@ elif page == "Model a sample":
 
     with tab_custom:
         st.caption("Expert mode. Filesystem keywords are rejected; models run under a time limit.")
-        default_input = "SOLUTION 1\n    units mg/l\n    pH 7.2\n    Ca 88\n    Alkalinity 210 as HCO3\nEND\n"
+        default_input = (
+            "SOLUTION 1\n    units mg/l\n    pH 7.2\n    Ca 88\n    Alkalinity 210 as HCO3\nEND\n"
+        )
         raw = st.text_area("PHREEQC input", value=default_input, height=320)
         if st.button("Run input"):
             try:

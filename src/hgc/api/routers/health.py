@@ -20,13 +20,15 @@ async def healthz() -> dict[str, str]:
 
 
 @router.get("/readyz", include_in_schema=False)
-async def readyz(request: Request, container: ContainerDep, response: Response) -> dict[str, object]:
+async def readyz(
+    request: Request, container: ContainerDep, response: Response
+) -> dict[str, object]:
     checks: dict[str, object] = {"version": __version__}
 
     try:
         checks["phreeqc_databases"] = sorted(container.engine.verify_databases())
         checks["phreeqc"] = "ok"
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         checks["phreeqc"] = f"unavailable: {exc}"
 
     if checks.get("phreeqc") != "ok":

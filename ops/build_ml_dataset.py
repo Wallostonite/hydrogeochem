@@ -38,9 +38,8 @@ import pandas as pd
 
 from hgc.config import get_settings
 from hgc.domain.models import Measurement, ModelSpec, WaterSample
-from hgc.services.dataset import BUCKETS
+from hgc.services.dataset import BUCKETS, bucket_samples, flatten_sample
 from hgc.services.dataset import DEFAULT_DATASET_PHASES as DEFAULT_PHASES
-from hgc.services.dataset import bucket_samples, flatten_sample
 from hgc.services.phreeqc import PhreeqcEngine
 
 

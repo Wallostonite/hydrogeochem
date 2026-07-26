@@ -7,7 +7,7 @@ classic way to melt a service under load; do it once at startup and share.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 from fastapi import Depends, Request
 
@@ -15,8 +15,13 @@ from ..config import Settings, get_settings
 from ..db.memory import InMemoryRunRepository
 from ..services.cache import build_cache
 from ..services.phreeqc import PhreeqcEngine
-from ..services.runs import RunService, SampleService
+from ..services.runs import RunRepository, RunService, SampleService
 from ..services.usgs import HttpConfig, UsgsClient
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session, sessionmaker
+
+    from ..db.repository import SqlRunRepository
 
 
 @dataclass(slots=True)
@@ -26,14 +31,14 @@ class Container:
     usgs: UsgsClient
     runs: RunService
     samples: SampleService
-    session_factory: object | None = None  # None in test mode (no database)
+    session_factory: sessionmaker[Session] | None = None  # None in test mode (no database)
 
     async def aclose(self) -> None:
         await self.usgs.aclose()
         self.engine.shutdown()
 
 
-def build_container(settings: Settings | None = None, queue=None) -> Container:
+def build_container(settings: Settings | None = None, queue: Any = None) -> Container:
     settings = settings or get_settings()
     cache = build_cache(None if settings.testing else settings.redis_url)
 
@@ -61,8 +66,10 @@ def build_container(settings: Settings | None = None, queue=None) -> Container:
     )
 
     session_factory = None if settings.testing else _build_session_factory(settings)
-    repository = (
-        InMemoryRunRepository() if settings.testing else _sql_repository(session_factory)
+    repository: RunRepository = (
+        InMemoryRunRepository()
+        if settings.testing or session_factory is None
+        else _sql_repository(session_factory)
     )
 
     runs = RunService(
@@ -82,7 +89,7 @@ def build_container(settings: Settings | None = None, queue=None) -> Container:
     )
 
 
-def _build_session_factory(settings: Settings):
+def _build_session_factory(settings: Settings) -> sessionmaker[Session]:
     """Imported lazily so that a test or a UI process never needs SQLAlchemy installed."""
     from ..db.base import build_session_factory
 
@@ -93,14 +100,14 @@ def _build_session_factory(settings: Settings):
     )
 
 
-def _sql_repository(session_factory):
+def _sql_repository(session_factory: sessionmaker[Session]) -> SqlRunRepository:
     from ..db.repository import SqlRunRepository
 
     return SqlRunRepository(session_factory)
 
 
 def get_container(request: Request) -> Container:
-    return request.app.state.container
+    return cast(Container, request.app.state.container)
 
 
 ContainerDep = Annotated[Container, Depends(get_container)]

@@ -1,4 +1,4 @@
-"""Typed errors. Transport layers map these to problem documents; nothing else raises bare Exception."""
+"""Typed errors. Transport layers map these to problem documents; nothing else raises bare."""
 
 from __future__ import annotations
 

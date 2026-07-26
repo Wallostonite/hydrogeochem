@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 
 from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 
@@ -11,7 +13,7 @@ class Base(DeclarativeBase):
     pass
 
 
-def build_engine(url: str, pool_size: int = 10, max_overflow: int = 10):
+def build_engine(url: str, pool_size: int = 10, max_overflow: int = 10) -> Engine:
     return create_engine(
         url,
         pool_size=pool_size,
@@ -22,7 +24,7 @@ def build_engine(url: str, pool_size: int = 10, max_overflow: int = 10):
     )
 
 
-def build_session_factory(url: str, **kwargs) -> sessionmaker[Session]:
+def build_session_factory(url: str, **kwargs: Any) -> sessionmaker[Session]:
     return sessionmaker(bind=build_engine(url, **kwargs), expire_on_commit=False, future=True)
 
 

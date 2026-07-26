@@ -79,7 +79,7 @@ def _principal_from_token(token: str) -> Principal:
         claims = jwt.decode(
             token, settings.jwt_secret.get_secret_value(), algorithms=["HS256"], audience="hgc"
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(status_code=401, detail="invalid token") from exc
     return Principal(
         subject=str(claims.get("sub", "unknown")),

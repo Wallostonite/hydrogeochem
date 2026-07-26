@@ -13,11 +13,13 @@ Three properties of IPhreeqc force this design:
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import multiprocessing as mp
 import os
 import time
-from concurrent.futures import BrokenExecutor, ProcessPoolExecutor, TimeoutError as FutureTimeout
+from concurrent.futures import BrokenExecutor, ProcessPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
@@ -89,17 +91,15 @@ def _child_run(input_text: str, database_path: str) -> dict[str, Any]:  # pragma
         instance.run_string(input_text)
     except Exception as exc:  # phreeqpy raises on non-zero return
         error = f"{exc}"
-    try:
+    with contextlib.suppress(Exception):
         error = error or instance.get_error_string()
-    except Exception:  # noqa: BLE001
-        pass
     try:
         warning = instance.get_warning_string()
-    except Exception:  # noqa: BLE001
+    except Exception:
         warning = ""
     try:
         selected = instance.get_selected_output_array() if not error else []
-    except Exception:  # noqa: BLE001
+    except Exception:
         selected = []
     return {
         "selected_output": selected,
@@ -226,7 +226,9 @@ class PhreeqcEngine:
 
     # -- execution ---------------------------------------------------------------
 
-    def run(self, input_text: str, database: str, timeout_s: float | None = None) -> RawPhreeqcOutput:
+    def run(
+        self, input_text: str, database: str, timeout_s: float | None = None
+    ) -> RawPhreeqcOutput:
         path = self.resolve_database(database)
         deadline = timeout_s or self._timeout_s
         self.start()

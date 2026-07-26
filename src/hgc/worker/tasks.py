@@ -7,7 +7,7 @@ from datetime import date
 from typing import Any
 from uuid import UUID
 
-from ..api.deps import build_container
+from ..api.deps import Container, build_container
 from ..domain.errors import HgcError
 from ..domain.models import ModelSpec, RunRequest
 from ..logging import get_logger, set_request_id
@@ -15,10 +15,10 @@ from .celery_app import celery_app
 
 log = get_logger(__name__)
 
-_container = None
+_container: Container | None = None
 
 
-def container():
+def container() -> Container:
     """One container per worker process, created lazily so forking stays cheap."""
     global _container
     if _container is None:
@@ -27,8 +27,10 @@ def container():
     return _container
 
 
-@celery_app.task(name="hgc.run.execute", bind=True, max_retries=2, default_retry_delay=10)
-def execute_run(self, run_id: str, request_id: str | None = None) -> dict[str, Any]:
+@celery_app.task(  # type: ignore[untyped-decorator]
+    name="hgc.run.execute", bind=True, max_retries=2, default_retry_delay=10
+)
+def execute_run(self: Any, run_id: str, request_id: str | None = None) -> dict[str, Any]:
     set_request_id(request_id)
     ctx = container()
     try:
@@ -39,9 +41,9 @@ def execute_run(self, run_id: str, request_id: str | None = None) -> dict[str, A
     return {"run_id": str(run.id), "status": run.status.value}
 
 
-@celery_app.task(name="hgc.batch.run", bind=True)
+@celery_app.task(name="hgc.batch.run", bind=True)  # type: ignore[untyped-decorator]
 def run_batch(
-    self,
+    self: Any,
     site_ids: list[str],
     start: str,
     end: str,
@@ -77,7 +79,7 @@ def run_batch(
             )
         except HgcError as exc:
             outcomes.append({"site_id": site_id, "status": "failed", "error": exc.code})
-        except Exception as exc:  # noqa: BLE001 - one bad site must not kill the batch
+        except Exception as exc:
             log.exception("batch_item_error", extra={"site_id": site_id})
             outcomes.append({"site_id": site_id, "status": "error", "error": str(exc)[:200]})
 

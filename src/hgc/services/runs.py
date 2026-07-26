@@ -8,7 +8,7 @@ trivial speciation interactive without forcing every client to poll.
 from __future__ import annotations
 
 import hashlib
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -86,7 +86,7 @@ class RunService:
     # -- executing -----------------------------------------------------------------
 
     def submit(self, request: RunRequest) -> ModelRun:
-        """Returns a run that is either already complete or queued. Never blocks past the deadline."""
+        """Return a run that is either already complete or queued; never blocks past deadline."""
         built = self.build(request)
         database = request.spec.database
         db_sha = self._engine.database_checksum(database)
@@ -96,7 +96,8 @@ class RunService:
 
         if not request.force:
             existing = self._repo.get_by_hash(input_hash)
-            if existing and existing.status in (RunStatus.succeeded, RunStatus.queued, RunStatus.running):
+            live = (RunStatus.succeeded, RunStatus.queued, RunStatus.running)
+            if existing and existing.status in live:
                 log.info("run_deduplicated", extra={"run_id": str(existing.id)})
                 return existing
 
@@ -109,7 +110,7 @@ class RunService:
             engine_version=self._engine.engine_version,
             site_id=request.sample.site_id if request.sample else None,
             project_id=request.project_id,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         run = self._repo.create(run)
 
@@ -141,7 +142,7 @@ class RunService:
             run.status = RunStatus.failed
             run.error = exc.message
             run.error_code = exc.code
-            run.completed_at = datetime.now(timezone.utc)
+            run.completed_at = datetime.now(UTC)
             PHREEQC_RUN_SECONDS.labels(database=run.database, outcome="error").observe(0)
             RUNS_TOTAL.labels(status="failed", mode=mode).inc()
             log.warning("run_failed", extra={"run_id": str(run.id), "code": exc.code})
@@ -157,7 +158,7 @@ class RunService:
         run.duration_ms = raw.duration_ms
         run.engine_version = raw.engine_version
         run.database_sha256 = raw.database_sha256
-        run.completed_at = datetime.now(timezone.utc)
+        run.completed_at = datetime.now(UTC)
         PHREEQC_RUN_SECONDS.labels(database=run.database, outcome="ok").observe(
             raw.duration_ms / 1000
         )

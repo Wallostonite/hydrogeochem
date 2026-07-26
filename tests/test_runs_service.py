@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 
 from hgc.db.memory import InMemoryRunRepository
-from hgc.domain.errors import PhreeqcTimeoutError
+from hgc.domain.errors import PhreeqcTimeoutError, UnsafeInputError
 from hgc.domain.models import RunRequest, RunStatus
 from hgc.services.phreeqc.engine import RawPhreeqcOutput
 from hgc.services.runs import RunService, compute_input_hash
@@ -92,6 +92,6 @@ def test_slow_keywords_are_routed_to_the_queue(sample, spec):
 def test_unsafe_custom_input_never_reaches_the_engine(spec):
     engine = FakeEngine()
     svc = service(engine)
-    with pytest.raises(Exception):
+    with pytest.raises(UnsafeInputError):
         svc.submit(RunRequest(raw_input="DUMP\n    -file /tmp/x\nEND\n", spec=spec))
     assert engine.calls == 0

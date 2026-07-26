@@ -39,11 +39,31 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's Query/Path/Depends are meant to be called in argument defaults; that is the
+# framework's idiom, not the mutable-default bug B008 guards against.
+extend-immutable-calls = ["fastapi.Query", "fastapi.Path", "fastapi.Depends", "fastapi.Header"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = true
 plugins = []
 ignore_missing_imports = true
+
+# Third-party data/UI libraries we don't type-check. `follow_imports = "skip"` keeps mypy
+# from parsing their stubs at all — notably numpy, whose modern stubs use 3.12-only `type`
+# statements that a 3.11 target rejects. Their public surface is treated as Any.
+[[tool.mypy.overrides]]
+module = ["numpy.*", "pandas.*", "plotly.*", "pydeck.*", "streamlit.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
+
+# The Streamlit UI is a thin boundary over an untyped framework (streamlit's cache
+# decorators) and untyped JSON from the API (`response.json()` is Any). The rest of the
+# package stays fully strict; here we only silence that irreducible boundary noise.
+[[tool.mypy.overrides]]
+module = ["hgc.ui.*"]
+disable_error_code = ["no-any-return", "untyped-decorator"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

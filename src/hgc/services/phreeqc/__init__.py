@@ -6,8 +6,8 @@ from .sanitizer import sanitize_input
 __all__ = [
     "PhreeqcEngine",
     "RawPhreeqcOutput",
-    "build_solution_input",
     "build_custom_input",
+    "build_solution_input",
     "parse_selected_output",
     "sanitize_input",
 ]

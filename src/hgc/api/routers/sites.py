@@ -43,7 +43,7 @@ async def ready_sites(
     container: ContainerDep,
     principal: Annotated[Principal, Depends(rate_limit_general)],
     source: str = Query(default="wqp", pattern="^(wqp|synthetic)$"),
-    provider: str | None = Query(default=None, description="Deprecated; ignored (Samples API is USGS-only)"),
+    provider: str | None = Query(default=None, description="Deprecated; ignored (USGS-only)"),
     state: str | None = Query(default=None, min_length=2, max_length=2),
     bbox: str | None = Query(default=None, description="west,south,east,north"),
     min_required: int | None = Query(default=None, ge=1),

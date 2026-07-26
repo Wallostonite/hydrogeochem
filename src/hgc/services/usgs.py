@@ -15,9 +15,10 @@ from __future__ import annotations
 import asyncio
 import csv
 import io
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any, Iterable, Protocol
+from typing import Any, Protocol
 
 import httpx
 from tenacity import (
@@ -122,7 +123,9 @@ class UsgsClient:
         except httpx.HTTPError as exc:
             raise UpstreamError(f"could not reach {url}: {exc}") from exc
 
-    async def _get_text(self, url: str, params: dict[str, Any], timeout: float | None = None) -> str:
+    async def _get_text(
+        self, url: str, params: dict[str, Any], timeout: float | None = None
+    ) -> str:
         response = await self._request(url, params, timeout)
         return "" if response.status_code == 404 else response.text
 
@@ -249,7 +252,7 @@ class UsgsClient:
         key = cache_key("obs", {"site": site_id})
         cached = self._cache.get(key)
         if cached is not None:
-            return cached
+            return int(cached)
         text = await self._get_text(
             f"{self._cfg.samples_base}/summary/{site_id}", {"mimeType": "text/csv"}, timeout=30.0
         )
@@ -408,7 +411,10 @@ def normalise_samples_rows(rows: Iterable[dict[str, str]], site_id: str) -> list
         )
 
     if unmapped:
-        log.info("samples_characteristics_unmapped", extra={"characteristics": sorted(unmapped)[:20]})
+        log.info(
+            "samples_characteristics_unmapped",
+            extra={"characteristics": sorted(unmapped)[:20]},
+        )
 
     samples = [
         WaterSample(

@@ -141,8 +141,7 @@ def build_solution_input(sample: WaterSample, spec: ModelSpec) -> BuiltInput:
     title = spec.title.replace("\n", " ")[:120]
     body, notes, included = _solution_lines(sample, spec)
 
-    totals = [BY_KEY[k].phreeqc for k in included if BY_KEY[k].phreeqc]
-    totals = [t for t in totals if t]
+    totals = [p for k in included if (p := BY_KEY[k].phreeqc)]
     if "Alkalinity" in totals:
         totals[totals.index("Alkalinity")] = "C(4)"
 
@@ -178,7 +177,9 @@ def build_custom_input(raw: str, spec: ModelSpec) -> BuiltInput:
     text = raw if raw.endswith("\n") else raw + "\n"
     if "SELECTED_OUTPUT" not in text.upper():
         text += "\n".join(_selected_output_block(spec, [])) + "\nEND\n"
-    return BuiltInput(text=text, notes=["Custom input: server-side validation is limited to safety."])
+    return BuiltInput(
+        text=text, notes=["Custom input: server-side validation is limited to safety."]
+    )
 
 
 def summarise_for_display(built: BuiltInput) -> str:

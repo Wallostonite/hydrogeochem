@@ -66,10 +66,11 @@ class ApiClient:
         site_ids: str | None = None,
         limit: int | None = 200,
     ) -> list[dict[str, Any]]:
-        params = {k: v for k, v in
+        params: dict[str, Any] = {k: v for k, v in
                   {"state": state, "bbox": bbox, "site_ids": site_ids}.items()
                   if v}
-        params["limit"] = 0 if limit is None else limit  # 0 = no limit; set explicitly so it survives
+        # 0 = no limit; set explicitly so it survives serialisation
+        params["limit"] = 0 if limit is None else limit
         return self._request("GET", "/v1/sites", params=params)
 
     def ready_sites(
@@ -96,7 +97,9 @@ class ApiClient:
         params["limit"] = 0 if limit is None else limit
         return self._request("GET", "/v1/sites/ready", params=params)
 
-    def samples(self, site_id: str, start: date, end: date, aggregate: str = "median") -> dict:
+    def samples(
+        self, site_id: str, start: date, end: date, aggregate: str = "median"
+    ) -> dict[str, Any]:
         return self._request(
             "GET",
             f"/v1/sites/{site_id}/samples",

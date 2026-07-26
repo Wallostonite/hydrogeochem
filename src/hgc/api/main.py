@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -22,7 +23,7 @@ log = get_logger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     configure_logging(settings.log_level, settings.log_format, settings.service_name)
 
@@ -34,7 +35,7 @@ async def lifespan(app: FastAPI):
         checksums = container.engine.verify_databases()
         log.info("phreeqc_databases_verified", extra={"databases": sorted(checksums)})
         container.engine.start()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.error("phreeqc_unavailable", extra={"error": str(exc)})
         app.state.engine_ready = False
     else:
@@ -63,7 +64,9 @@ app.add_middleware(
 
 
 @app.middleware("http")
-async def observability(request: Request, call_next):
+async def observability(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     request_id = set_request_id(request.headers.get("x-request-id"))
     started = time.perf_counter()
     try:
@@ -127,7 +130,8 @@ async def unhandled_handler(request: Request, exc: Exception) -> JSONResponse:
             "title": "internal error",
             "status": 500,
             "code": "internal_error",
-            "detail": "The request could not be completed. Reference the request id when reporting.",
+            "detail": "The request could not be completed. "
+            "Reference the request id when reporting.",
         },
     )
 

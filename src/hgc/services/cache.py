@@ -68,7 +68,7 @@ class RedisCache:
     def get(self, key: str) -> Any | None:
         try:
             raw = self._client.get(key)
-        except Exception as exc:  # noqa: BLE001 - degrade, never fail the request
+        except Exception as exc:
             log.warning("cache_get_failed", extra={"error": str(exc)})
             return None
         return json.loads(raw) if raw else None
@@ -76,7 +76,7 @@ class RedisCache:
     def set(self, key: str, value: Any, ttl_s: int) -> None:
         try:
             self._client.setex(key, ttl_s, json.dumps(value, default=str))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("cache_set_failed", extra={"error": str(exc)})
 
 
@@ -87,7 +87,7 @@ def build_cache(redis_url: str | None) -> Cache:
         cache = RedisCache(redis_url)
         cache.ping()  # verify the server is actually reachable, not just the URL parseable
         return cache
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         # No Redis (e.g. a single-container deploy)? Fall back to an in-process cache rather
         # than a Redis that silently fails every op, which is effectively no caching at all.
         log.warning("redis_unavailable_using_memory_cache", extra={"error": str(exc)})

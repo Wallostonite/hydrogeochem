@@ -7,9 +7,8 @@ and a saturation index per requested phase. Shared by the API dataset endpoint a
 
 from __future__ import annotations
 
-from typing import Any
-
 from datetime import datetime
+from typing import Any
 
 from ..domain.models import ModelSpec, WaterSample
 from .phreeqc import PhreeqcEngine, build_solution_input, parse_selected_output
@@ -55,7 +54,7 @@ def flatten_sample(sample: WaterSample, spec: ModelSpec, engine: PhreeqcEngine) 
         record["meta_database_sha256"] = raw.database_sha256
         record["meta_engine_version"] = raw.engine_version
         record["meta_duration_ms"] = raw.duration_ms
-    except Exception as exc:  # noqa: BLE001 - a failed model is a valid, labelled row
+    except Exception as exc:
         record["out_status"] = "failed"
         record["out_error"] = str(exc)[:200]
     return record

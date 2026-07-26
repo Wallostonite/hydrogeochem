@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -15,7 +16,8 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -30,7 +32,7 @@ class Project(Base):
     owner: Mapped[str] = mapped_column(String(200), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    runs: Mapped[list["ModelRunRow"]] = relationship(back_populates="project")
+    runs: Mapped[list[ModelRunRow]] = relationship(back_populates="project")
 
 
 class SampleRow(Base):
@@ -43,8 +45,10 @@ class SampleRow(Base):
     latitude: Mapped[float | None] = mapped_column(Float)
     longitude: Mapped[float | None] = mapped_column(Float)
     charge_balance_pct: Mapped[float | None] = mapped_column(Float)
-    measurements: Mapped[dict] = mapped_column(JSONB)
-    ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    measurements: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     __table_args__ = (
         UniqueConstraint("site_id", "sampled_at", "source", name="uq_sample_identity"),
@@ -63,7 +67,7 @@ class ModelRunRow(Base):
     database_sha256: Mapped[str | None] = mapped_column(String(64))
     engine_version: Mapped[str | None] = mapped_column(String(64))
     input_text: Mapped[str] = mapped_column(Text)
-    result: Mapped[dict | None] = mapped_column(JSONB)
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     error: Mapped[str | None] = mapped_column(Text)
     error_code: Mapped[str | None] = mapped_column(String(64))
     duration_ms: Mapped[int | None] = mapped_column(Integer)

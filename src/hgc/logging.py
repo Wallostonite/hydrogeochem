@@ -55,7 +55,9 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, default=str)
 
 
-def configure_logging(level: str = "INFO", fmt: str = "json", service: str = "hydrogeochem") -> None:
+def configure_logging(
+    level: str = "INFO", fmt: str = "json", service: str = "hydrogeochem"
+) -> None:
     handler = logging.StreamHandler(sys.stdout)
     if fmt == "json":
         handler.setFormatter(JsonFormatter(service))
