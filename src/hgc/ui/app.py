@@ -30,6 +30,21 @@ def load_catalog() -> dict[str, Any]:
     return get_client().catalog()
 
 
+@st.cache_data(ttl=3600)
+def load_template() -> str:
+    return get_client().dataset_template()
+
+
+def order_dataset_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """Stable, grouped column order: identity, inputs, outputs, saturation indices, meta."""
+    order = ("id_", "in_", "out_", "si_", "meta_")
+
+    def rank(col: str) -> tuple[int, str]:
+        return next(((i, col) for i, p in enumerate(order) if col.startswith(p)), (5, col))
+
+    return frame[sorted(frame.columns, key=rank)]
+
+
 def show_error(exc: ApiError) -> None:
     """Errors name what happened and what to do; they do not apologise."""
     guidance = {
@@ -251,14 +266,7 @@ if page == "Find sites":
                             st.info("No modellable rows for the selected sites and window.")
                             st.session_state.pop("multi_dataset_csv", None)
                         else:
-                            frame = pd.DataFrame(records)
-                            order = ("id_", "in_", "out_", "si_", "meta_")
-                            frame = frame[sorted(
-                                frame.columns,
-                                key=lambda c: next(
-                                    ((i, c) for i, p in enumerate(order) if c.startswith(p)), (5, c)
-                                ),
-                            )]
+                            frame = order_dataset_columns(pd.DataFrame(records))
                             st.session_state["multi_dataset_csv"] = frame.to_csv(index=False)
                             st.session_state["multi_rows"] = len(frame)
                             st.session_state["multi_sites"] = frame["id_site_id"].nunique()
@@ -277,7 +285,9 @@ if page == "Find sites":
 elif page == "Model a sample":
     st.header("Model a sample")
 
-    tab_fetch, tab_custom = st.tabs(["From a USGS site", "Custom PHREEQC input"])
+    tab_fetch, tab_csv, tab_custom = st.tabs(
+        ["From a USGS site", "From a CSV upload", "Custom PHREEQC input"]
+    )
 
     with tab_fetch:
         # Keyed so "Model this site" on the Find sites page can prefill it.
@@ -434,15 +444,7 @@ elif page == "Model a sample":
                     st.info("No modellable samples in this window.")
                     st.session_state.pop("dataset_csv", None)
                 else:
-                    frame = pd.DataFrame(ds_records)
-                    order = ("id_", "in_", "out_", "si_", "meta_")
-
-                    def _rank(c: str) -> tuple[int, str]:
-                        return next(
-                            ((i, c) for i, p in enumerate(order) if c.startswith(p)), (5, c)
-                        )
-
-                    frame = frame[sorted(frame.columns, key=_rank)]
+                    frame = order_dataset_columns(pd.DataFrame(ds_records))
                     st.session_state["dataset_csv"] = frame.to_csv(index=False)
                     st.session_state["dataset_rows"] = len(frame)
                     st.session_state["dataset_site"] = site_id
@@ -452,6 +454,88 @@ elif page == "Model a sample":
                 st.session_state["dataset_csv"],
                 file_name=f"dataset_{st.session_state.get('dataset_site', 'site')}.csv",
                 mime="text/csv",
+            )
+
+    with tab_csv:
+        st.caption(
+            "Bring your own analyses. Download the template, fill in one row per sample, and "
+            "upload it. Every row is modelled through the same PHREEQC pipeline; blank cells "
+            "are fine and unrecognised columns are ignored."
+        )
+        try:
+            st.download_button(
+                "Download CSV template", load_template(),
+                file_name="hydrogeochem_template.csv", mime="text/csv",
+            )
+        except ApiError as exc:
+            show_error(exc)
+        st.caption(
+            "Units follow each header: mg/L for major ions, ug/L for trace metals, std units "
+            "for pH, degC for temperature. Use '<0.01' for below-detection values. Optional "
+            "columns: site_id, date, latitude, longitude."
+        )
+        uploaded = st.file_uploader("Upload your filled-in CSV", type=["csv"], key="csv_upload")
+        c1, c2 = st.columns(2)
+        csv_bucket = c1.selectbox(
+            "Rows", ["event", "year", "quarter", "month", "window"], key="csv_bucket",
+            format_func=lambda b: {
+                "event": "one row per uploaded analysis",
+                "year": "per year (median)", "quarter": "per quarter (median)",
+                "month": "per month (median)", "window": "one row per site",
+            }[b],
+        )
+        csv_phases = c2.multiselect(
+            "Saturation indices", catalog["default_phases"], catalog["default_phases"][:4],
+            key="csv_phases",
+        )
+        if uploaded is not None and st.button("Model uploaded CSV", type="primary"):
+            try:
+                with st.spinner("Parsing and modelling every row..."):
+                    out = get_client().dataset_from_csv(
+                        uploaded.getvalue(), filename=uploaded.name, database=database,
+                        phases=csv_phases or None, bucket=csv_bucket,
+                    )
+            except ApiError as exc:
+                show_error(exc)
+            else:
+                report = out.get("report", {})
+                rows = out.get("rows", [])
+                recognized = report.get("recognized", [])
+                ignored = report.get("ignored", [])
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Rows parsed", report.get("rows", 0))
+                m2.metric("Columns recognised", len(recognized))
+                m3.metric("Modelled rows", len(rows))
+                if recognized:
+                    mapped = ", ".join(
+                        f"{c['column']} -> {c['key']} ({c['unit']})" for c in recognized
+                    )
+                    st.caption("Recognised: " + mapped)
+                if ignored:
+                    st.warning("Ignored (unrecognised) columns: " + ", ".join(ignored))
+                if report.get("missing_required"):
+                    st.warning(
+                        "Missing required analytes across the file: "
+                        + ", ".join(report["missing_required"])
+                        + ". Models still run, but treat the outputs as indicative."
+                    )
+                if not rows:
+                    st.info(
+                        "No modellable rows. Check that at least one analyte column was "
+                        "recognised and carries numeric values."
+                    )
+                    st.session_state.pop("csv_dataset_csv", None)
+                else:
+                    frame = order_dataset_columns(pd.DataFrame(rows))
+                    ok = int((frame["out_status"] == "succeeded").sum()) \
+                        if "out_status" in frame.columns else 0
+                    st.success(f"{len(frame)} rows modelled ({ok} succeeded).")
+                    st.dataframe(frame, use_container_width=True, hide_index=True)
+                    st.session_state["csv_dataset_csv"] = frame.to_csv(index=False)
+        if st.session_state.get("csv_dataset_csv"):
+            st.download_button(
+                "Download modelled dataset CSV", st.session_state["csv_dataset_csv"],
+                file_name="uploaded_dataset.csv", mime="text/csv", key="csv_ds_dl",
             )
 
     with tab_custom:

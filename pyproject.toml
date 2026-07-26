@@ -42,7 +42,9 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's Query/Path/Depends are meant to be called in argument defaults; that is the
 # framework's idiom, not the mutable-default bug B008 guards against.
-extend-immutable-calls = ["fastapi.Query", "fastapi.Path", "fastapi.Depends", "fastapi.Header"]
+extend-immutable-calls = [
+    "fastapi.Query", "fastapi.Path", "fastapi.Depends", "fastapi.Header", "fastapi.File",
+]
 
 [tool.mypy]
 python_version = "3.11"

@@ -17,7 +17,7 @@ from ..domain.errors import HgcError
 from ..logging import configure_logging, get_logger, set_request_id
 from ..metrics import HTTP_REQUEST_SECONDS
 from .deps import build_container
-from .routers import health, runs, samples, sites
+from .routers import datasets, health, runs, samples, sites
 
 log = get_logger(__name__)
 
@@ -144,4 +144,5 @@ async def metrics() -> Response:
 app.include_router(health.router)
 app.include_router(sites.router, prefix="/v1")
 app.include_router(samples.router, prefix="/v1")
+app.include_router(datasets.router, prefix="/v1")
 app.include_router(runs.router, prefix="/v1")

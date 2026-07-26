@@ -130,6 +130,35 @@ class ApiClient:
             params["phases"] = phases
         return self._request("GET", f"/v1/sites/{site_id}/dataset", params=params)
 
+    def dataset_template(self) -> str:
+        """The upload template as raw CSV text (not JSON, so it bypasses _request)."""
+        try:
+            response = requests.get(
+                f"{self.base_url.rstrip('/')}/v1/datasets/template",
+                headers=self._headers(),
+                timeout=self.timeout,
+            )
+        except requests.RequestException as exc:
+            raise ApiError(f"Could not reach the API at {self.base_url}.") from exc
+        if response.status_code >= 400:
+            raise ApiError(f"Could not fetch the template ({response.status_code}).")
+        return response.text
+
+    def dataset_from_csv(
+        self,
+        data: bytes,
+        filename: str = "upload.csv",
+        database: str = "phreeqc.dat",
+        phases: list[str] | None = None,
+        bucket: str = "event",
+        aggregate: str = "median",
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"database": database, "bucket": bucket, "aggregate": aggregate}
+        if phases:
+            params["phases"] = phases
+        files = {"file": (filename, data, "text/csv")}
+        return self._request("POST", "/v1/datasets/csv", params=params, files=files)
+
     def preview(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/v1/runs/preview", json=payload)
 
